@@ -1,16 +1,14 @@
-import uvicorn  # <-- NEW IMPORT
+import uvicorn
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import shutil
 import os
-
-# Import your brain
 from brain.speech_services import transcribe_audio, generate_speech
 
 app = FastAPI()
 
-# 1. Allow React to talk to Python (CORS)
+# Allow frontend to communicate with backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,7 +17,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 2. MOUNT THE AUDIO FOLDER
+# Setup directory for generated audio files
 os.makedirs("generated_audio", exist_ok=True)
 app.mount("/audio", StaticFiles(directory="generated_audio"), name="audio")
 
@@ -29,31 +27,35 @@ def read_root():
 
 @app.post("/process-voice")
 async def process_voice(file: UploadFile = File(...)):
-    # Save the user's recording temporarily
-    temp_filename = "temp_input.webm"
+    # Save incoming audio from browser
+    temp_filename = "temp_input.webm" 
+    
     with open(temp_filename, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-
-    # 1. Listen (Speech to Text)
+        
+    # Log file status
+    file_size = os.path.getsize(temp_filename)
+    print(f"Received file: {file.filename}, Size: {file_size} bytes")
+    
+    # Process speech to text
+    print(f"Transcribing {temp_filename}...")
     user_text = transcribe_audio(temp_filename)
     print(f"User said: {user_text}")
 
-    # 2. Think (AI Brain) - Simple echo for now
+    # Generate response text
     jarvis_response = f"You said: {user_text}. I am fully operational."
     
-    # 3. Speak (Text to Speech)
+    # Process text to speech
     output_filename = "response.wav"
     file_path = os.path.join("generated_audio", output_filename)
-    
     generate_speech(jarvis_response, file_path)
 
-    # Return the data + the PUBLIC URL for the audio
     return {
         "user_text": user_text,
         "jarvis_text": jarvis_response,
         "audio_url": f"http://127.0.0.1:8000/audio/{output_filename}" 
     }
 
-# --- 🚀 THE MISSING PART: START THE SERVER ---
+# Start the server
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
