@@ -7,29 +7,28 @@ import torchaudio
 import whisper
 import soundfile as sf
 import numpy as np
-from speechbrain.inference import EncoderClassifier
-from transformers import SpeechT5Processor, SpeechT5ForTextToSpeech, SpeechT5HifiGan
 
-# Silence system warnings
-warnings.filterwarnings("ignore", category=UserWarning)
-warnings.filterwarnings("ignore", category=FutureWarning)
-
-# Patch for torchaudio compatibility with SpeechBrain
+# --- CRITICAL FIX START ---
+# This must run before importing SpeechBrain to prevent crash on Windows
 if not hasattr(torchaudio, "list_audio_backends"):
     def _list_audio_backends():
         return ["soundfile"]
     torchaudio.list_audio_backends = _list_audio_backends
+# --- CRITICAL FIX END ---
 
-# Configuration and Device Setup
+from speechbrain.inference import EncoderClassifier
+from transformers import SpeechT5Processor, SpeechT5ForTextToSpeech, SpeechT5HifiGan
+
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Speech Services running on: {DEVICE}")
 
-# Define paths for the reference voice
 VOICE_FILENAME = "jarvis_voice.wav"
 VOICES_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "voices")
 REF_VOICE_PATH = os.path.join(VOICES_DIR, VOICE_FILENAME)
 
-# Load AI Models
 print("Loading Whisper model...")
 stt_model = whisper.load_model("base", device=DEVICE)
 
@@ -46,7 +45,6 @@ classifier = EncoderClassifier.from_hparams(
 )
 
 def get_speaker_embedding(path):
-    """Generates speaker embedding from a reference audio file."""
     if os.path.exists(path):
         try:
             signal, fs = torchaudio.load(path)
@@ -58,6 +56,9 @@ def get_speaker_embedding(path):
                 embeddings = classifier.encode_batch(signal)
                 embeddings = torch.nn.functional.normalize(embeddings, dim=2)
                 xvec = embeddings.squeeze().mean(dim=0).unsqueeze(0)
+                if xvec.shape[-1] > 512:
+                    xvec = xvec[:, :512]
+            
             print(f"Loaded Voice Profile: {path}")
             return xvec.to(DEVICE)
         except Exception as e:
@@ -66,11 +67,9 @@ def get_speaker_embedding(path):
     print("Using Default System Voice (Randomized)")
     return torch.randn(1, 512).to(DEVICE)
 
-# Initialize global speaker profile
 SPEAKER_EMBEDDING = get_speaker_embedding(REF_VOICE_PATH)
 
 def transcribe_audio(file_path: str):
-    """Converts speech audio to text."""
     try:
         abs_path = os.path.abspath(file_path)
         if not os.path.exists(abs_path):
@@ -84,7 +83,6 @@ def transcribe_audio(file_path: str):
         return "..."
 
 def generate_speech(text: str, output_file: str):
-    """Converts text to speech audio."""
     if not text:
         return None
     
