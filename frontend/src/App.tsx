@@ -49,7 +49,7 @@ function App() {
   const speakText = async (text: string) => {
     try {
       const res = await fetch(
-        `http://127.0.0.1:8001/tts?text=${encodeURIComponent(text)}`,
+        `http://127.0.0.1:8000/tts?text=${encodeURIComponent(text)}`,
         { method: "POST" }
       );
 
