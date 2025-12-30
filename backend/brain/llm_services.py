@@ -1,5 +1,5 @@
 import os
-from dotenv import load_dotenv  # <--- This was missing!
+from dotenv import load_dotenv
 from langchain_mistralai import ChatMistralAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser

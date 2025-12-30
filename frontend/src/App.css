@@ -50,20 +50,19 @@ body {
   position: relative;
   transition: all 0.3s ease;
   z-index: 10;
+  transform-origin: center center;
+  will-change: transform;
 }
 
 /* Core Ring Detail */
 .arc-reactor::after {
   content: '';
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 80%;
-  height: 80%;
+  inset: 10%;
   border: 2px dashed var(--accent-color);
   border-radius: 50%;
   animation: spin 10s linear infinite;
+  box-sizing: border-box;
 }
 
 /* Animations based on State */
@@ -77,6 +76,8 @@ body {
   animation: pulse 0.8s infinite alternate;
   background: radial-gradient(circle, #fff 20%, var(--primary-color) 80%);
   box-shadow: 0 0 100px var(--primary-color);
+  transform: scale(1.08);
+
 }
 
 .arc-reactor.processing {
@@ -192,11 +193,11 @@ button.mic-active {
 
 /* --- ANIMATIONS --- */
 @keyframes spin {
-  0% { transform: translate(-50%, -50%) rotate(0deg); }
-  100% { transform: translate(-50%, -50%) rotate(360deg); }
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 @keyframes pulse {
-  0% { opacity: 0.6; transform: scale(0.95); }
-  100% { opacity: 1; transform: scale(1.05); }
+  0% { opacity: 0.7; }
+  100% { opacity: 1; }
 }

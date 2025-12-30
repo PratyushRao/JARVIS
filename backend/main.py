@@ -12,6 +12,7 @@ import soundfile as sf
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from vosk import Model, KaldiRecognizer
 from transformers import (
@@ -19,6 +20,14 @@ from transformers import (
     SpeechT5ForTextToSpeech,
     SpeechT5HifiGan
 )
+
+from brain.llm_services import get_brain_response
+from brain.memory_services import (
+    get_vector_store,
+    search_memory,
+    add_text_to_memory
+)
+from langchain_core.messages import HumanMessage, AIMessage
 
 # =====================
 # CONFIG
@@ -41,10 +50,17 @@ app.add_middleware(
 )
 
 # =====================
+# 🔹 ADDED: MEMORY INIT
+# =====================
+
+vector_store = get_vector_store()
+chat_history = []   # In-memory (OK for now)
+
+# =====================
 # SPEECH TO TEXT (VOSK)
 # =====================
 
-VOSK_MODEL_PATH = os.path.join(BASE_DIR,"SpeechToText", "vosk-model-small-en-us-0.15")
+VOSK_MODEL_PATH = os.path.join(BASE_DIR,"SpeechToText", "vosk-model-en-us-0.22")
 
 if not os.path.exists(VOSK_MODEL_PATH):
     raise RuntimeError("Vosk model not found")
@@ -57,11 +73,9 @@ async def speech_to_text(file: UploadFile = File(...)):
     webm_path = f"{uid}.webm"
     wav_path = f"{uid}.wav"
 
-    # Save uploaded file
     with open(webm_path, "wb") as f:
         f.write(await file.read())
 
-    # Convert webm → wav (16kHz mono)
     subprocess.run(
         [
             FFMPEG_PATH,
@@ -101,15 +115,47 @@ async def speech_to_text(file: UploadFile = File(...)):
     return {"text": result_text.strip()}
 
 # =====================
+# 🔹 ADDED: CHAT ENDPOINT (LLM)
+# =====================
+
+class ChatRequest(BaseModel):
+    text: str
+
+class ChatResponse(BaseModel):
+    response: str
+
+@app.post("/chat", response_model=ChatResponse)
+def chat(req: ChatRequest):
+    user_text = req.text
+
+    # Retrieve relevant memory
+    memories = search_memory(user_text, vector_store)
+
+    # Get LLM response
+    response = get_brain_response(
+        user_input=user_text,
+        chat_history=chat_history,
+        long_term_memory=memories
+    )
+
+    # Update history
+    chat_history.append(HumanMessage(content=user_text))
+    chat_history.append(AIMessage(content=response))
+
+    # Store memory (basic rule)
+    if len(user_text) > 20:
+        add_text_to_memory(user_text, vector_store)
+
+    return ChatResponse(response=response)
+
+# =====================
 # TEXT TO SPEECH (SpeechT5)
 # =====================
 
-# Load speaker embedding
 embedding_path = r"C:\Users\praty\OneDrive\Desktop\Jarvis\JARVIS\backend\TextToSpeech\speaker_embedding.txt"
 embedding = np.loadtxt(embedding_path)
 speaker_embedding = torch.tensor(embedding, dtype=torch.float32).unsqueeze(0)
 
-# Load models ONCE
 processor = SpeechT5Processor.from_pretrained("microsoft/speecht5_tts")
 tts_model = SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts")
 vocoder = SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan")
