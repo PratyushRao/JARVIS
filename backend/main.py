@@ -183,7 +183,7 @@ def text_to_speech(text: str):
         combined_audio.append(audio_chunk)
         
         # Add a little silence between sentences (0.2 seconds)
-        silence = np.zeros(int(16000 * 0.2)) 
+        silence = np.zeros(int(16000 * 0.05)) 
         combined_audio.append(silence)
 
     # 2. Stitch all audio chunks together
