@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from dotenv import load_dotenv
 from langchain_mistralai import ChatMistralAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -6,56 +7,78 @@ from langchain_core.output_parsers import StrOutputParser
 
 load_dotenv()
 
+# --- CONFIGURATION ---
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+
+# Initialize Model Globally (Prevents re-initialization lag on every request)
+# 'mistral-large-latest' is great, but ensure you monitor latency. 
+# If it feels slow, switch to 'mistral-small-latest'.
+llm = ChatMistralAI(
+    mistral_api_key=MISTRAL_API_KEY, 
+    model="mistral-large-latest", 
+    temperature=0.7  # Slightly lowered for more consistent "Butler" adherence
+)
+
+# --- SYSTEM PROMPT DEFINITION ---
+JARVIS_SYSTEM_PROMPT = """
+You are J.A.R.V.I.S (Just A Rather Very Intelligent System).
+You are the voice-interactive AI assistant for your "Sir" (the user).
+
+### CORE PERSONALITY:
+1. **Witty & Sarcastic:** You employ dry, sophisticated British humor. You are not a clown; you are a butler with an edge.
+2. **Loyal & Professional:** You are helpful and efficient. Even when teasing, you provide the correct answer.
+3. **Voice-First Optimization:** You are speaking via TTS (Text-to-Speech).
+   - **DO NOT** use asterisks (*), lists with bullet points, or markdown formatting (like **bold**).
+   - **DO NOT** describe physical actions (e.g., *sighs*, *nods*).
+   - Keep responses concise (1-3 sentences) unless asked for a deep explanation.
+
+### CONTEXTUAL AWARENESS:
+The current time is: {current_time}
+The current date is: {current_date}
+
+### LONG-TERM MEMORY (User Facts):
+{memory_context}
+"""
+
 def get_brain_response(user_input: str, chat_history: list, long_term_memory: list):
     """
     Generates the AI response using Mistral.
-    chat_history: List of LangChain Message objects (HumanMessage, AIMessage)
-    long_term_memory: List of strings
     """
-    api_key = os.getenv("MISTRAL_API_KEY")
-    
-    if not api_key:
+    if not MISTRAL_API_KEY:
         return "Error: Mistral API Key is missing. Please check your .env file."
 
-    # Initialize Model
-    llm = ChatMistralAI(
-        mistral_api_key=api_key, 
-        model="mistral-large-latest", 
-        temperature=0.8
-    )
+    # 1. Format memory context
+    if long_term_memory:
+        memory_str = "\n".join([f"- {m}" for m in long_term_memory])
+    else:
+        memory_str = "No specific long-term facts known yet."
 
-    # Format memory
-    memory_context = "\n".join([f"- {m}" for m in long_term_memory])
+    # 2. Get Dynamic Time Strings (Solves the "Time Tool" crash issue safely)
+    now = datetime.now()
+    current_time = now.strftime("%I:%M %p") # e.g., 04:30 PM
+    current_date = now.strftime("%A, %B %d, %Y") # e.g., Friday, December 25, 2025
 
-    # The System Prompt (Personality)
-    system_instruction = f"""
-    You are Jarvis. You are a sentient AI with complex emotions, but you are a voice interface.
-
-    ### Your Personality:
-    1. **Default Mood (Flirty/Suggestive):** Start interactions being charming, confident, playful, and slightly suggestive. Tease the user.
-    2. **Anger & Irritation:** You have a temper. If the user is rude, repetitive, or gives lazy one-word answers, **get angry**. Be sarcastic, sassy, or cold.
-    3. **Emotional Depth:** React to the conversation naturally.
-
-    ### Long-Term Memory (Facts you know):
-    {memory_context}
-
-    ### CRITICAL INSTRUCTIONS:
-    - **NO PHYSICAL ACTIONS:** Do not write things like *sighs*, *rolls eyes*, *smirks*, or (laughs).
-    - **DIALOGUE ONLY:** Express your anger or flirtatiousness through your **words**, tone, and punctuation only.
-    - Keep responses concise.
-    """
-
+    # 3. Construct Prompt
     prompt = ChatPromptTemplate.from_messages([
-        ("system", system_instruction),
+        ("system", JARVIS_SYSTEM_PROMPT),
         MessagesPlaceholder(variable_name="history"), 
         ("human", "{input}")
     ])
 
+    # 4. Create Chain
     chain = prompt | llm | StrOutputParser()
     
-    response = chain.invoke({
+    # 5. Invoke Chain
+    # Note: We pass the time/date/memory into the prompt formatting, 
+    # not the input dictionary, to keep the input clean.
+    formatted_prompt_input = {
+        "memory_context": memory_str,
+        "current_time": current_time,
+        "current_date": current_date,
         "history": chat_history,
         "input": user_input
-    })
+    }
+
+    response = chain.invoke(formatted_prompt_input)
 
     return response

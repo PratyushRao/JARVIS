@@ -4,11 +4,11 @@ import uuid
 import subprocess
 import edge_tts 
 import re
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-from typing import List
+from pydantic import BaseModel, Field
+from typing import Optional, List
 
 # Import your modules
 import brain.memory_manager as mem
@@ -25,20 +25,24 @@ app = FastAPI()
 # Allow your Frontend (npm run dev) to talk to this Backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, replace * with your frontend URL
+    allow_origins=["*"], 
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Load Whisper once on startup
+print("⏳ Loading Whisper Model...")
 whisper_model = WhisperModel("base.en", device="cpu", compute_type="int8")
+print("✅ Whisper Model Loaded!")
 
 # =====================
 # REQUEST MODELS
 # =====================
 class ChatRequest(BaseModel):
     text: str
-    chat_id: str = None 
+    # 'alias' allows the frontend to send "chatId" (JS style) 
+    # while Python uses "chat_id"
+    chat_id: Optional[str] = Field(None, alias="chatId") 
 
 class ChatResponse(BaseModel):
     response: str
@@ -46,6 +50,9 @@ class ChatResponse(BaseModel):
 
 class RenameRequest(BaseModel):
     new_name: str
+
+class TTSRequest(BaseModel):
+    text: str
 
 # =====================
 # 1. MANAGEMENT ENDPOINTS (For Sidebar)
@@ -111,6 +118,7 @@ def chat_endpoint(req: ChatRequest):
     long_term_mem = mem.get_long_term_memory()
 
     # 4. Generate Response
+    # This calls your NEW llm_services.py function
     ai_response = brain.get_brain_response(user_text, langchain_history, long_term_mem)
 
     # 5. Save to DB
@@ -137,38 +145,50 @@ async def speech_to_text(file: UploadFile = File(...)):
         f.write(await file.read())
 
     try:
+        # Convert WebM to WAV (16kHz, Mono) for Whisper
         subprocess.run(
             [FFMPEG_PATH, "-y", "-i", webm_path, "-ar", "16000", "-ac", "1", wav_path],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
         )
-    except Exception:
+    except Exception as e:
+        print(f"FFmpeg Error: {e}")
         return {"error": "FFmpeg conversion failed"}
 
     segments, _ = whisper_model.transcribe(wav_path, language="en", vad_filter=True)
     text = " ".join(s.text for s in segments)
 
+    # Cleanup temp files
     if os.path.exists(webm_path): os.remove(webm_path)
     if os.path.exists(wav_path): os.remove(wav_path)
 
     return {"text": text.strip()}
 
 @app.post("/tts")
-async def text_to_speech(text: str):
+async def text_to_speech(req: TTSRequest):
+    """
+    Accepts JSON: {"text": "Hello world"}
+    Returns: Audio stream (MP3)
+    """
+    text = req.text
     if not text.strip():
         return {"error": "No text provided"}
 
-    # Cleanup text for better audio
+    # Cleanup text for better audio (remove markdown, special chars)
     clean_text = re.sub(r'[*#`_~]', '', text) 
-    clean_text = re.sub(r'[^\w\s,!.?\']', '', clean_text)
     
     output_file = f"tts_{uuid.uuid4().hex}.mp3"
+    
+    # Generate Audio
     communicate = edge_tts.Communicate(clean_text, "en-GB-RyanNeural")
     await communicate.save(output_file)
     
+    # Read file to memory
     with open(output_file, "rb") as f:
         audio_data = f.read()
     
+    # Cleanup file
     os.remove(output_file)
+    
     return StreamingResponse(io.BytesIO(audio_data), media_type="audio/mpeg")
 
 # =====================

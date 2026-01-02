@@ -1,7 +1,7 @@
 /* src/App.tsx */
 import { useRef, useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
-import * as api from "./api"; // <--- Import our new helper
+import * as api from "./api"; 
 import "./App.css";
 
 interface Message {
@@ -23,10 +23,7 @@ function App() {
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
-  const audioQueueRef = useRef<string[]>([]);
-  const isPlayingRef = useRef(false);
 
   // 1. Load Chats on Startup
   useEffect(() => {
@@ -56,7 +53,6 @@ function App() {
     setActiveChatId(id);
     const history = await api.fetchChatHistory(id);
     
-    // Map backend format (human/ai) to frontend format (user/jarvis)
     const formatted: Message[] = history.map((h) => ({
         sender: h.role === "human" ? "user" : "jarvis",
         text: h.content
@@ -69,11 +65,11 @@ function App() {
     const newChat = await api.createNewChat();
     setChatList([newChat, ...chatList]);
     setActiveChatId(newChat.chat_id);
-    setMessages([]); // Clear screen for new chat
+    setMessages([]); 
   };
 
   const handleDeleteChat = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent clicking the parent div
+    e.stopPropagation(); 
     await api.deleteChat(id);
     setChatList(chatList.filter(c => c.chat_id !== id));
     
@@ -124,22 +120,14 @@ function App() {
   const handleAudioSubmit = async (audioBlob: Blob) => {
     setIsProcessing(true);
 
-    const formData = new FormData();
-    formData.append("file", audioBlob, "speech.webm");
-
     try {
-      // 1. Get Text from Speech
-      const res = await fetch("http://127.0.0.1:8000/stt", {
-        method: "POST",
-        body: formData,
-      });
+      // FIX 1: Use the api.ts helper we created
+      const text = await api.sendAudio(audioBlob);
 
-      const data = await res.json();
-
-      if (data.text) {
-        addMessage("user", data.text);
-        // 2. Process via Brain
-        await processResponse(data.text);
+      if (text) {
+        addMessage("user", text);
+        // Pass text to brain
+        await processResponse(text);
       }
     } catch (error) {
       console.error("Error sending audio:", error);
@@ -157,30 +145,32 @@ function App() {
     if (!textInput.trim()) return;
 
     addMessage("user", textInput);
+    setTextInput("");
     setIsProcessing(true);
     await processResponse(textInput);
-    setTextInput("");
     setIsProcessing(false);
   };
 
   // =====================
-  // LLM LOGIC (Updated to use API)
+  // LLM LOGIC
   // =====================
 
   const processResponse = async (text: string) => {
     try {
-      // Use our new API helper so it sends the chat_id
+      // FIX 2: Send activeChatId so backend knows context
       const data = await api.sendMessage(text, activeChatId);
       
-      // If backend created a new ID (for first msg), update state
+      // Update ID if backend assigned a new one
       if (data.chat_id && data.chat_id !== activeChatId) {
           setActiveChatId(data.chat_id);
-          // Refresh list to show new name
           loadSidebar();
       }
 
       addMessage("jarvis", data.response);
-      await speakText(data.response);
+      
+      // FIX 3: Trigger TTS with animation state
+      await playAudioResponse(data.response);
+
     } catch (error) {
       console.error("Error fetching chat response:", error);
       addMessage("jarvis", "I'm having trouble connecting to my brain right now.");
@@ -188,50 +178,35 @@ function App() {
   };
 
   // =====================
-  // TTS (Sentence Queueing)
+  // TTS (Animation Linked)
   // =====================
 
-  const playNextInQueue = () => {
-    if (audioQueueRef.current.length === 0) {
-      isPlayingRef.current = false;
-      setIsSpeaking(false);
-      return;
-    }
-
-    isPlayingRef.current = true;
-    setIsSpeaking(true);
-
-    const nextAudioUrl = audioQueueRef.current.shift(); // Take first item
-
-    if (audioPlayerRef.current && nextAudioUrl) {
-      audioPlayerRef.current.src = nextAudioUrl;
-      audioPlayerRef.current.play();
-      audioPlayerRef.current.onended = playNextInQueue;
-    }
-  };
-
-  const speakText = async (text: string) => {
+  const playAudioResponse = async (text: string) => {
     if (!text) return;
 
-    const sentences = text.match(/[^\.!\?]+[\.!\?]+/g) || [text];
+    setIsSpeaking(true); // START ANIMATION
 
-    for (const sentence of sentences) {
-      try {
-        const res = await fetch(
-          `http://127.0.0.1:8000/tts?text=${encodeURIComponent(sentence)}`,
-          { method: "POST" }
-        );
+    try {
+        // FIX 4: Correct fetch to new JSON endpoint
+        const res = await fetch("http://127.0.0.1:8000/tts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text })
+        });
 
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
-        audioQueueRef.current.push(url);
+        const audio = new Audio(url);
 
-        if (!isPlayingRef.current) {
-          playNextInQueue();
-        }
-      } catch (error) {
-        console.error("Error generating speech segment:", error);
-      }
+        // When audio ends, STOP ANIMATION
+        audio.onended = () => {
+            setIsSpeaking(false);
+        };
+
+        await audio.play();
+    } catch (e) {
+        console.error("TTS Error", e);
+        setIsSpeaking(false); // Stop if error
     }
   };
 
@@ -333,7 +308,6 @@ function App() {
           {isRecording ? "STOP" : "VOICE"}
         </button>
 
-        {/* 👇 THIS IS NOW THE SIDEBAR TOGGLE */}
         <button 
             type="button" 
             onClick={() => setShowSidebar(!showSidebar)}
@@ -342,8 +316,6 @@ function App() {
           {showSidebar ? "HIDE" : "SHOW"}
         </button>
       </form>
-
-      <audio ref={audioPlayerRef} hidden />
     </div>
   );
 }
