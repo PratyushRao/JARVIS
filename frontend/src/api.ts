@@ -73,6 +73,18 @@ export const playTTS = async (text: string) => {
   }
 };
 
+export const renameChat = async (chatId: string, newName: string) => {
+  try {
+    await fetch(`${API_BASE}/chats/${chatId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ new_name: newName }),
+    });
+  } catch (error) {
+    console.error("Error renaming chat:", error);
+  }
+};
+
 export const sendAudio = async (audioBlob: Blob): Promise<string> => {
     const formData = new FormData();
     formData.append("file", audioBlob, "recording.webm");
@@ -81,7 +93,11 @@ export const sendAudio = async (audioBlob: Blob): Promise<string> => {
         method: "POST",
         body: formData, // No JSON headers for file upload
     });
+
+  
     
     const data = await res.json();
     return data.text; 
+
+
 }

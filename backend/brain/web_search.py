@@ -1,27 +1,26 @@
+from langchain_core.tools import tool
 from duckduckgo_search import DDGS
 
-def search_duckduckgo(query: str):
+@tool
+def search_duckduckgo(query: str) -> str:
     """
-    Searches DuckDuckGo and returns a formatted string of results.
+    Performs a web search using DuckDuckGo to find current information, 
+    news, or facts. Use this when the user asks about recent events.
     """
-    print(f"🔎 SEARCHING WEB FOR: {query}")
     try:
-        # We use the Context Manager as shown in your notebook
+        # max_results=3 keeps it fast
         with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=4))
+            results = list(ddgs.text(query, max_results=3))
             
-            if not results:
-                return "No results found on the web."
-
-            # Format the output for the LLM to read easily
-            formatted_results = []
-            for r in results:
-                formatted_results.append(
-                    f"Title: {r['title']}\nURL: {r['href']}\nSnippet: {r['body']}\n"
-                )
+        if not results:
+            return "No results found."
             
-            return "\n---\n".join(formatted_results)
-
+        # Format the output cleanly
+        formatted_results = []
+        for r in results:
+            formatted_results.append(f"Title: {r['title']}\nSnippet: {r['body']}\nURL: {r['href']}")
+            
+        return "\n\n".join(formatted_results)
+        
     except Exception as e:
-        print(f"❌ Search Error: {e}")
-        return f"Error searching the web: {str(e)}"
+        return f"Error performing web search: {e}"

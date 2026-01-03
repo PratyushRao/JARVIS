@@ -18,6 +18,7 @@ class Brain:
         )
         
         # 2. Bind the Tool DIRECTLY to the Model
+        # We pass the @tool decorated function directly
         self.llm_with_tools = self.llm.bind_tools(
             [search_duckduckgo],
             tool_choice="auto"
@@ -48,7 +49,6 @@ class Brain:
                 else:
                     messages.append(AIMessage(content=msg.get('content')))
             else:
-                # Handle Object format: It is already a HumanMessage/AIMessage object
                 messages.append(msg)
         
         # 3. Add Current User Input
@@ -60,22 +60,25 @@ class Brain:
 
             # 5. Check if Brain wants to use the Tool
             if ai_msg.tool_calls:
+                # IMPORTANT: Append the AI's "intent" message to history ONCE
+                messages.append(ai_msg)
+
                 for tool_call in ai_msg.tool_calls:
                     if tool_call["name"] == "search_duckduckgo":
                         search_query = tool_call["args"]["query"]
                         print(f"🔎 J.A.R.V.I.S Searching: {search_query}")
                         
                         # Run the search
-                        tool_output = search_duckduckgo(search_query)
+                        tool_output = search_duckduckgo.invoke(search_query)
                         
                         # Feed result back to Brain
-                        messages.append(ai_msg) 
                         messages.append(ToolMessage(content=str(tool_output), tool_call_id=tool_call["id"]))
 
                 # 6. Final Answer (after seeing search results)
                 final_response = self.llm_with_tools.invoke(messages)
                 return final_response.content
             
+            # If no tool was used, return the first response
             return ai_msg.content
             
         except Exception as e:
