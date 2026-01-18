@@ -94,10 +94,21 @@ export const sendAudio = async (audioBlob: Blob): Promise<string> => {
         body: formData, // No JSON headers for file upload
     });
 
-  
-    
     const data = await res.json();
     return data.text; 
-
-
 }
+
+// Sends an image file and a question to the backend and returns the chat response
+export const sendImageQuestion = async (file: File, question: string, chatId: string | null) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("question", question);
+    if (chatId) form.append("chat_id", chatId);
+
+    const res = await fetch(`${API_BASE}/image_qa`, {
+        method: "POST",
+        body: form,
+    });
+
+    return await res.json();
+};

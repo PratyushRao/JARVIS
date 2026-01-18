@@ -1,8 +1,8 @@
 /* src/App.tsx */
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import * as api from "./api"; 
-import Sidebar from "./Sidebar"; // <--- Import the new component
+import Sidebar from "./components/Sidebar"; // <--- Moved to components folder
 import "./App.css";
 
 interface Message {
@@ -17,6 +17,17 @@ function App() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [textInput, setTextInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const imagePreviewUrl = useMemo(() => {
+    if (selectedFile) return URL.createObjectURL(selectedFile);
+    return null;
+  }, [selectedFile]);
+
+  useEffect(() => {
+    return () => {
+      if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+    };
+  }, [imagePreviewUrl]);
   
   // --- UI STATE ---
   const [showSidebar, setShowSidebar] = useState(false);
@@ -28,13 +39,6 @@ function App() {
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   // 1. Initial Load: Get list, select most recent if available
-  useEffect(() => {
-    api.fetchChatList().then(chats => {
-        if (chats.length > 0) {
-            handleSelectChat(chats[0].chat_id);
-        }
-    });
-  }, []);
 
   // 2. Auto-scroll to bottom of chat
   useEffect(() => {
@@ -50,7 +54,7 @@ function App() {
     const history = await api.fetchChatHistory(id);
     
     // Convert backend history to UI format
-    const formatted: Message[] = history.map((h: any) => ({
+    const formatted: Message[] = history.map((h: { role: string; content: string }) => ({
         sender: h.role === "human" ? "user" : "jarvis",
         text: h.content
     }));
@@ -64,6 +68,16 @@ function App() {
     setMessages([]); // Clear chat window
     // Sidebar will auto-detect the ID change and refresh itself
   };
+
+  // 1. Initial Load: Get list, select most recent if available
+  useEffect(() => {
+    api.fetchChatList().then(chats => {
+        if (chats.length > 0) {
+            handleSelectChat(chats[0].chat_id);
+        }
+    });
+  }, []);
+
 
   // =====================
   // VOICE ENGINE
@@ -122,9 +136,46 @@ function App() {
     if (!textInput.trim()) return;
 
     addMessage("user", textInput);
+    const messageText = textInput;
     setTextInput("");
     setIsProcessing(true);
-    await processResponse(textInput);
+    await processResponse(messageText);
+    setIsProcessing(false);
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
+    }
+  };
+
+  const handleImageAsk = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedFile) {
+      alert("Please choose an image first.");
+      return;
+    }
+    if (!textInput.trim()) {
+      alert("Please type a question about the image in the input box.");
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      addMessage("user", `[Image: ${selectedFile.name}] ${textInput}`);
+      const data = await api.sendImageQuestion(selectedFile, textInput, activeChatId);
+      if (data.chat_id && data.chat_id !== activeChatId) setActiveChatId(data.chat_id);
+      addMessage("jarvis", data.response);
+      await playAudioResponse(data.response);
+      setTextInput("");
+      setSelectedFile(null);
+      // Clear the file input DOM element
+      const el = document.getElementById("image-input") as HTMLInputElement | null;
+      if (el) el.value = "";
+    } catch (e) {
+      console.error("Image ask error", e);
+      addMessage("jarvis", "I couldn't process your image question right now.");
+    }
     setIsProcessing(false);
   };
 
@@ -204,42 +255,66 @@ function App() {
         {messages.length === 0 && (
           <div className="system-text">System Online. Awaiting Input...</div>
         )}
-        {messages.map((msg, i) => (
-          <div key={i} className={`message ${msg.sender}`}>
-            <ReactMarkdown>{msg.text}</ReactMarkdown>
-          </div>
-        ))}
+        {messages.map((msg, i) => {
+          const lower = (msg.text || '').toLowerCase();
+          const isError = lower.includes('attempted to process the image') || lower.includes("language model is unavailable") || lower.includes("couldn't contact the language model");
+          return (
+            <div key={i} className={`message ${msg.sender} ${isError ? 'error' : ''}`}>
+              <ReactMarkdown>{msg.text}</ReactMarkdown>
+            </div>
+          )
+        })}
         <div ref={chatEndRef} />
       </div>
 
       {/* INPUT AREA */}
-      <form className="input-area" onSubmit={handleTextSubmit}>
+      <form className="input-area" onSubmit={selectedFile ? handleImageAsk : handleTextSubmit}>
         <input
           type="text"
           value={textInput}
           onChange={(e) => setTextInput(e.target.value)}
-          placeholder="Type a command..."
+          placeholder={selectedFile ? "Ask about the image..." : "Type a command..."}
           disabled={isProcessing || isRecording}
         />
-        <button type="submit" disabled={!textInput || isProcessing}>SEND</button>
-        
+
+        {/* IMAGE BUTTON */}
+        <label htmlFor="image-input" className="btn" style={{ cursor: 'pointer' }}>
+          {selectedFile ? selectedFile.name.substring(0, 10) + "..." : "IMAGE"}
+        </label>
+        <input
+          id="image-input"
+          type="file"
+          accept="image/*"
+          onChange={handleImageChange}
+          style={{ display: 'none' }}
+        />
+
         {/* MIC BUTTON */}
         <button
           type="button"
+          className="btn"
           onClick={isRecording ? stopRecording : startRecording}
-          className={isRecording ? "mic-active" : ""}
           disabled={isProcessing}
         >
           {isRecording ? "STOP" : "VOICE"}
         </button>
 
         {/* SIDEBAR TOGGLE */}
-        <button 
-            type="button" 
+        <button
+            type="button"
+            className="btn"
             onClick={() => setShowSidebar(!showSidebar)}
-            style={{border: showSidebar ? '1px solid red' : '1px solid #333'}}
         >
           {showSidebar ? "HIDE" : "SHOW"}
+        </button>
+
+        {/* SEND BUTTON */}
+        <button
+          type="submit"
+          className="btn"
+          disabled={(!textInput.trim() && !selectedFile) || isProcessing}
+        >
+          {selectedFile ? "ASK" : "SEND"}
         </button>
       </form>
     </div>

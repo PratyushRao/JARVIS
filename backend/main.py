@@ -1,25 +1,37 @@
+import sys
+import pathlib
+# Allow running this file directly from the `backend/` directory for convenience.
+# Prefer `python -m backend.main` from repo root, but if someone runs `python main.py`
+# ensure the project root is on sys.path so `import backend.*` works.
+if __package__ is None:
+    repo_root = pathlib.Path(__file__).resolve().parent.parent
+    repo_root_str = str(repo_root)
+    if repo_root_str not in sys.path:
+        sys.path.insert(0, repo_root_str)
+
 import os
 import io
 import uuid
 import subprocess
 import edge_tts 
 import re
-from fastapi import FastAPI, UploadFile, File, HTTPException, Body
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Optional, List
 
 # Import your modules
-import brain.memory_manager as mem
-import brain.llm_services as brain
+from backend.brain import memory_manager as mem
+from backend.brain import llm_services as brain
 from langchain_core.messages import HumanMessage, AIMessage
 from faster_whisper import WhisperModel
 
 # =====================
 # CONFIG
 # =====================
-FFMPEG_PATH = r"C:\ffmpeg\bin\ffmpeg.exe" # Update if needed
+import shutil
+FFMPEG_PATH = shutil.which("ffmpeg") or r"C:\ffmpeg\bin\ffmpeg.exe"  # Try to find ffmpeg in PATH first
 app = FastAPI()
 
 # Allow your Frontend (npm run dev) to talk to this Backend
@@ -34,6 +46,19 @@ app.add_middleware(
 print("⏳ Loading Whisper Model...")
 whisper_model = WhisperModel("base.en", device="cpu", compute_type="int8")
 print("✅ Whisper Model Loaded!")
+
+# Preload multimodal model for faster image processing
+print("⏳ Preloading Multimodal Model...")
+try:
+    from backend.brain import local_multimodal
+    if local_multimodal.is_available():
+        # Force model loading now
+        local_multimodal._init_model()
+        print("✅ Multimodal Model Preloaded!")
+    else:
+        print("⚠️ Multimodal Model not available")
+except Exception as e:
+    print(f"⚠️ Failed to preload multimodal model: {e}")
 
 # =====================
 # REQUEST MODELS
@@ -132,7 +157,56 @@ def chat_endpoint(req: ChatRequest):
     return ChatResponse(response=ai_response, chat_id=chat_id)
 
 # =====================
-# 3. VOICE ENDPOINTS (STT & TTS)
+# 3. IMAGE QUESTION ENDPOINT
+# =====================
+@app.post("/image_qa", response_model=ChatResponse)
+async def image_question(file: UploadFile = File(...), question: str = Form(...), chat_id: Optional[str] = Form(None)):
+    """Accepts an image file and a question, returns an image-aware response."""
+    # 1. Ensure chat id exists
+    if not chat_id:
+        new_chat = mem.create_new_chat()
+        chat_id = new_chat["chat_id"]
+
+    # 2. Read file bytes
+    contents = await file.read()
+
+    # 3. Use optimized multimodal LLM for all questions
+    try:
+        from backend.brain import local_multimodal
+        if local_multimodal and local_multimodal.is_available():
+            ans, err = local_multimodal.analyze_image_with_local_llm(contents, question)
+            if ans and not err:
+                mem.append_to_chat(chat_id, "human", f"[Image: {file.filename}] {question}")
+                mem.append_to_chat(chat_id, "ai", ans)
+                return ChatResponse(response=ans, chat_id=chat_id)
+    except Exception as e:
+        print(f"Multimodal analysis error: {e}")
+
+    # 4. If multimodal fails, give helpful error
+    ai_response = "I'm unable to analyze this image right now. The multimodal model may still be loading or encountered an error."
+
+    mem.append_to_chat(chat_id, "human", f"[Image: {file.filename}] {question}")
+    mem.append_to_chat(chat_id, "ai", ai_response)
+
+    return ChatResponse(response=ai_response, chat_id=chat_id)
+
+
+@app.get("/status")
+def service_status():
+    """Lightweight endpoint to check model/service availability.
+
+    Returns JSON describing whether GROQ key is present, whether the Brain successfully
+    initialized, whether the local multimodal model or caption libs appear available.
+    """
+    try:
+        from backend.brain import llm_services
+        return llm_services.check_status()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# =====================
+# 4. VOICE ENDPOINTS (STT & TTS)
 # =====================
 
 @app.post("/stt")
