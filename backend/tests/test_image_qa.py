@@ -11,13 +11,14 @@ from backend.main import app
 client = TestClient(app)
 
 
-def test_image_qa_captioning_success(monkeypatch):
-    # Arrange: patch the captioner
-    def fake_caption(b):
+def test_image_qa_multimodal_success(monkeypatch):
+    # Arrange: patch the multimodal analyzer
+    def fake_analyze(b, q):
         return ("A dog wearing a blue collar sitting on grass", None)
 
-    from backend.brain import image_services as isvc
-    monkeypatch.setattr(isvc, "caption_image", fake_caption)
+    from backend.brain import local_multimodal as lm
+    monkeypatch.setattr(lm, "is_available", lambda: True)
+    monkeypatch.setattr(lm, "analyze_image_with_local_llm", fake_analyze)
 
     # Act: send a fake image file and question
     files = {"file": ("dog.jpg", io.BytesIO(b"fakeimagebytes"), "image/jpeg")}
@@ -34,13 +35,10 @@ def test_image_qa_captioning_success(monkeypatch):
     assert "collar" in payload["response"].lower() or "blue" in payload["response"].lower()
 
 
-def test_image_qa_captioning_unavailable(monkeypatch):
-    # Simulate captioner returning None
-    def fake_caption(b):
-        return (None, "no model")
-
-    from backend.brain import image_services as isvc
-    monkeypatch.setattr(isvc, "caption_image", fake_caption)
+def test_image_qa_multimodal_unavailable(monkeypatch):
+    # Simulate multimodal LLM returning None
+    from backend.brain import local_multimodal as lm
+    monkeypatch.setattr(lm, "is_available", lambda: False)
 
     files = {"file": ("dog.jpg", io.BytesIO(b"fakeimagebytes"), "image/jpeg")}
     data = {"question": "Count objects", "chat_id": None}
@@ -49,4 +47,4 @@ def test_image_qa_captioning_unavailable(monkeypatch):
 
     assert res.status_code == 200
     payload = res.json()
-    assert "attempted to process the image" in payload["response"].lower()
+    assert "unable to analyze this image" in payload["response"].lower()
