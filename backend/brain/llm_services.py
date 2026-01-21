@@ -1,7 +1,8 @@
 import os
 import pathlib
 from dotenv import load_dotenv
-# Try to load .env from repo root first so users can run `python main.py` from `backend/`
+
+# Try to load .env from repo root first
 _repo_root = pathlib.Path(__file__).resolve().parents[2]
 _dotenv_path = _repo_root / ".env"
 if _dotenv_path.exists():
@@ -9,20 +10,13 @@ if _dotenv_path.exists():
 else:
     load_dotenv()
 
+# --- IMPORTS ---
+# Note: If Pylance complains, ensure you have run: 
+# pip install langchain-groq langchain-core langchain-community
 from langchain_groq import ChatGroq
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-# Support both old (pre-1.x) and new (1.x+) LangChain agent APIs
-try:
-    from langchain.agents import AgentExecutor, create_tool_calling_agent  # type: ignore
-    _AGENT_STYLE = "legacy"
-except Exception:
-    from langchain.agents import create_agent  # type: ignore
-    _AGENT_STYLE = "new"
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from backend.brain.web_search import get_search_tool
 
 # --- LOAD ENVIRONMENT VARIABLES ---
-load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 class Brain:
@@ -45,12 +39,20 @@ class Brain:
                 temperature=0.3,
             )
 
-            # 2. System message for the assistant
+            # 2. UPDATED SYSTEM MESSAGE (The Fix)
+            # This teaches Jarvis to output JSON when he needs to search
             self.system_message_text = (
                 "You are J.A.R.V.I.S, a helpful, witty, and precise AI assistant. "
-                "You have access to a real-time 'web_search' tool. "
-                "Use it whenever the user asks for current information (news, weather, dates, specific facts). "
-                "If the question is personal, answer from memory. "
+                "You have access to a real-time 'web_search' tool.\n\n"
+                "CRITICAL INSTRUCTION: If the user asks for real-time information (news, weather, time, sports scores, or facts you don't know), "
+                "you MUST output a specific JSON command to use the search tool.\n\n"
+                "COMMAND FORMAT:\n"
+                '{"query": "your search query here"}\n\n'
+                "Examples:\n"
+                'User: "Time in India?" -> You: {"query": "current time in India"}\n'
+                'User: "Who won the game?" -> You: {"query": "game winner yesterday"}\n\n'
+                "DO NOT say 'I cannot browse'. Output ONLY the JSON string when searching. "
+                "If the question is personal or known, answer directly. "
                 "Always maintain a cool, British butler persona."
             )
 
@@ -75,7 +77,7 @@ class Brain:
                 formatted_history.append(msg)
 
         try:
-            # 2. Use LLM directly (simplified, no agent for now)
+            # 2. Use LLM directly
             all_messages = [
                 SystemMessage(content=self.system_message_text),
                 *formatted_history,
@@ -95,11 +97,7 @@ _brain_instance = None
 
 
 def _get_brain_instance():
-    """Return a Brain instance, re-attempt initialization when a GROQ key becomes available.
-
-    This avoids sticking to a permanently-failed initialization if the user supplies the GROQ key
-    after starting the server; it will try to re-initialize on demand.
-    """
+    """Return a Brain instance, re-attempt initialization when a GROQ key becomes available."""
     global _brain_instance
     groq_key = os.getenv("GROQ_API_KEY")
 
@@ -152,11 +150,7 @@ def get_brain_response(user_input: str, chat_history: list, long_term_memory: li
 
 # --- STATUS CHECK ---
 def check_status() -> dict:
-    """Return a lightweight status dict describing model availability.
-
-    This avoids triggering heavy network initialization; it reports env keys and
-    quick, safe availability checks (local multimodal files + caption libs).
-    """
+    """Return a lightweight status dict describing model availability."""
     # Local multimodal availability is cheap to check
     try:
         from backend.brain.local_multimodal import is_available as _local_avail

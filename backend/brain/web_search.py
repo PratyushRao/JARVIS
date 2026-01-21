@@ -1,29 +1,43 @@
 import os
-
-try:
-    from langchain_community.utilities import GoogleSerperAPIWrapper
-except Exception:
-    GoogleSerperAPIWrapper = None
-
+from dotenv import load_dotenv
+from langchain_community.utilities import GoogleSerperAPIWrapper
 from langchain_core.tools import Tool
 
+# 1. Load environment variables explicitly
+load_dotenv()
 
 def get_search_tool():
-    # If Serper wrapper is unavailable, return a disabled tool so the agent still initializes
-    if GoogleSerperAPIWrapper is None:
-        def _disabled_search(query: str):
-            return "Web search unavailable in this environment."
+    """
+    Returns the Google Serper search tool.
+    Requires SERPER_API_KEY in the .env file.
+    """
+    api_key = os.getenv("SERPER_API_KEY")
 
+    # 2. Check if the key exists before trying to initialize
+    if not api_key:
+        print("⚠️ Warning: SERPER_API_KEY not found in .env file.")
+        def _disabled_search(query: str):
+            return "System Error: Web Search is disabled because the SERPER_API_KEY is missing."
+        
         return Tool(
-            name="web_search",
-            func=_disabled_search,
-            description="Disabled: web_search is not installed or configured."
+            name="web_search", 
+            func=_disabled_search, 
+            description="Disabled search."
         )
 
-    # Serper needs SERPER_API_KEY in .env
-    search = GoogleSerperAPIWrapper()
-    return Tool(
-        name="web_search",
-        func=search.run,
-        description="Search the web for current events, news, facts, or specific information."
-    )
+    try:
+        # 3. Initialize Serper
+        # k=5 means it returns the top 5 results
+        search = GoogleSerperAPIWrapper(k=5)
+        
+        return Tool(
+            name="web_search",
+            func=search.run,
+            description="Search the web for current events, news, facts, or specific information."
+        )
+        
+    except Exception as e:
+        print(f"❌ Error initializing Serper: {e}")
+        def _error_search(query: str):
+            return f"Search Error: {str(e)}"
+        return Tool(name="web_search", func=_error_search, description="Error in search.")
