@@ -12,6 +12,7 @@ interface Message {
 
 function App() {
   // --- CORE STATE ---
+  const [agentOnline, setAgentOnline] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -78,6 +79,21 @@ function App() {
     });
   }, []);
 
+  useEffect(() => {
+  const checkAgent = async () => {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/agent-status");
+      const data = await res.json();
+      setAgentOnline(data.connected);
+    } catch {
+      setAgentOnline(false);
+    }
+  };
+
+  checkAgent();
+  const interval = setInterval(checkAgent, 3000); // auto-refresh
+  return () => clearInterval(interval);
+}, []);
 
   // =====================
   // VOICE ENGINE
@@ -233,7 +249,7 @@ function App() {
     <div className="jarvis-container">
       {/* HEADER */}
       <h1 style={{ letterSpacing: "5px", textShadow: "0 0 10px red", zIndex: 10 }}>
-        J.A.R.V.I.S
+        J.A.R.V.I.S {agentOnline ? "🟢" : "🔴"}
       </h1>
 
       {/* NEW SIDEBAR COMPONENT */}

@@ -1,7 +1,7 @@
 import sys
 import pathlib
-import json  # Added for parsing the "sticky note" JSON
-
+import json  
+import asyncio
 # Allow running this file directly from the `backend/` directory for convenience.
 if __package__ is None:
     repo_root = pathlib.Path(__file__).resolve().parent.parent
@@ -18,6 +18,7 @@ import re
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi import WebSocket
 from pydantic import BaseModel, Field
 from typing import Optional, List
 
@@ -26,7 +27,7 @@ from typing import Optional, List
 # =====================
 from backend.brain import memory_manager as mem
 from backend.brain import llm_services as brain
-from backend.brain import web_search as searcher  # <--- NEW IMPORT
+from backend.brain import web_search as searcher  
 from langchain_core.messages import HumanMessage, AIMessage
 from faster_whisper import WhisperModel
 
@@ -36,6 +37,21 @@ from faster_whisper import WhisperModel
 import shutil
 FFMPEG_PATH = shutil.which("ffmpeg") or r"C:\ffmpeg\bin\ffmpeg.exe"
 app = FastAPI()
+
+connected_agent = None
+agent_lock = asyncio.Lock()
+
+AGENT_PATH = os.path.join(os.path.dirname(__file__), "agent.exe")
+
+def start_agent():
+    try:
+        subprocess.Popen(AGENT_PATH)
+        print("🚀 Local agent started automatically")
+    except Exception as e:
+        print("❌ Failed to start agent:", e)
+
+start_agent()
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -81,6 +97,24 @@ class TTSRequest(BaseModel):
 # =====================
 # HELPER FUNCTIONS
 # =====================
+
+def extract_first_json(text):
+    start = text.find("{")
+    if start == -1:
+        return None
+
+    brace_count = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            brace_count += 1
+        elif text[i] == "}":
+            brace_count -= 1
+
+        # When braces balance, we found the matching }
+        if brace_count == 0:
+            return text[start:i+1]
+
+    return None 
 
 def perform_search(query):
     """
@@ -135,7 +169,7 @@ def get_history(chat_id: str):
 # =====================
 
 @app.post("/chat", response_model=ChatResponse)
-def chat_endpoint(req: ChatRequest):
+async def chat_endpoint(req: ChatRequest):
     user_text = req.text
     chat_id = req.chat_id
 
@@ -157,6 +191,34 @@ def chat_endpoint(req: ChatRequest):
 
     # 3. FIRST CALL TO BRAIN
     ai_response = brain.get_brain_response(user_text, langchain_history, long_term_mem)
+    ai_response = ai_response.replace("```json", "").replace("```", "")
+    tool_data = None
+    try:
+
+        
+        json_str = extract_first_json(ai_response)
+
+        if json_str:
+            tool_data = json.loads(json_str)
+    except Exception as e:
+        print("JSON parse fail:", e)
+
+    if isinstance(tool_data, dict) and "action" in tool_data:
+        print("📤 Sending command to agent:", tool_data)
+
+        if connected_agent:
+            try:
+                await connected_agent.send_text(json.dumps(tool_data))
+                final_answer = f"Executing {tool_data['action']}..."
+            except Exception as e:
+                print("Agent send failed:", e)
+                final_answer = "⚠️ Agent connected but command failed."
+        else:
+            final_answer = "⚠️ Local agent is not running."
+
+        mem.append_to_chat(chat_id, "human", user_text)
+        mem.append_to_chat(chat_id, "ai", final_answer)
+        return ChatResponse(response=final_answer, chat_id=chat_id)
 
     # 4. CHECK FOR TOOL CALL (The "Sticky Note")
     # We look for a JSON object containing "query"
@@ -186,6 +248,10 @@ def chat_endpoint(req: ChatRequest):
                 langchain_history.append(AIMessage(content=ai_response)) # The JSON request
                 
                 final_answer = brain.get_brain_response(search_context, langchain_history, long_term_mem)
+            
+      
+            
+
     except Exception as e:
         print(f"⚠️ Tool call parsing failed, returning original response. Error: {e}")
         # If parsing fails, we just return the original text (which might be raw JSON, but better than crashing)
@@ -333,6 +399,29 @@ async def text_to_speech(req: TTSRequest):
     os.remove(output_file)
     
     return StreamingResponse(io.BytesIO(audio_data), media_type="audio/mpeg")
+
+@app.websocket("/ws/agent")
+async def agent_ws(ws: WebSocket):
+    global connected_agent
+    await ws.accept()
+    connected_agent = ws
+    print("🖥 Agent connected")
+    
+    try:
+        while True:
+            data = await ws.receive_text()
+            print("Agent result:", data)
+    except Exception as e:
+        print("Agent disconnected:", e)
+    finally:
+        if connected_agent == ws:
+            connected_agent = None
+
+
+@app.get("/agent-status")
+def agent_status():
+    return {"connected": connected_agent is not None}
+
 
 # =====================
 # RUNNER
