@@ -2,7 +2,7 @@
 import { useRef, useState, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import * as api from "./api"; 
-import Sidebar from "./components/Sidebar"; // <--- Moved to components folder
+import Sidebar from "./components/Sidebar"; 
 import "./App.css";
 
 interface Message {
@@ -247,93 +247,58 @@ function App() {
 
   return (
     <div className="jarvis-container">
-      {/* HEADER */}
-      <h1 style={{ letterSpacing: "5px", textShadow: "0 0 10px red", zIndex: 10 }}>
-        J.A.R.V.I.S {agentOnline ? "🟢" : "🔴"}
-      </h1>
-
-      {/* NEW SIDEBAR COMPONENT */}
-      <Sidebar 
-        isOpen={showSidebar}
-        activeChatId={activeChatId}
-        onSelectChat={handleSelectChat}
-        onNewChat={handleNewChat}
-        onClose={() => setShowSidebar(false)}
-      />
-
-      {/* ORB ANIMATION */}
-      <div className="orb-container">
-        <div className={`arc-reactor ${isRecording ? "listening" : ""} ${isProcessing ? "processing" : ""} ${isSpeaking ? "speaking" : ""}`} />
+      {/* LEFT PANEL: Logo + Orb */}
+      <div className="jarvis-left">
+        <h1 className="jarvis-title">J.A.R.V.I.S</h1>
+        <div className="orb-container">
+          <div className={`arc-reactor 
+            ${isRecording ? "listening" : ""} 
+            ${isProcessing ? "processing" : ""} 
+            ${isSpeaking ? "speaking" : ""}`}>
+            <span className={`status-dot ${agentOnline ? "online" : "offline"}`} />
+          </div>
+        </div>
       </div>
 
-      {/* CHAT WINDOW */}
-      <div className="chat-window">
-        {messages.length === 0 && (
-          <div className="system-text">System Online. Awaiting Input...</div>
-        )}
-        {messages.map((msg, i) => {
-          const lower = (msg.text || '').toLowerCase();
-          const isError = lower.includes('attempted to process the image') || lower.includes("language model is unavailable") || lower.includes("couldn't contact the language model");
-          return (
-            <div key={i} className={`message ${msg.sender} ${isError ? 'error' : ''}`}>
-              <ReactMarkdown>{msg.text}</ReactMarkdown>
-            </div>
-          )
-        })}
-        <div ref={chatEndRef} />
+      {/* RIGHT PANEL: Chat + Input */}
+      <div className="jarvis-right">
+        {/* SIDEBAR COMPONENT */}
+        <Sidebar 
+          isOpen={showSidebar}
+          activeChatId={activeChatId}
+          onSelectChat={handleSelectChat}
+          onNewChat={handleNewChat}
+          onClose={() => setShowSidebar(false)}
+        />
+
+        {/* CHAT CONTAINER */}
+        <div className="chat-container">
+          <div className="chat-window">
+            {messages.length === 0 && <div className="system-text">System Online. Awaiting Input...</div>}
+            {messages.map((msg, i) => {
+              const lower = (msg.text || '').toLowerCase();
+              const isError = lower.includes('attempted to process the image') || lower.includes("language model is unavailable") || lower.includes("couldn't contact the language model");
+              return (
+                <div key={i} className={`message ${msg.sender} ${isError ? 'error' : ''}`}>
+                  <ReactMarkdown>{msg.text}</ReactMarkdown>
+                </div>
+              );
+            })}
+            <div ref={chatEndRef} />
+          </div>
+
+          <form className="input-area" onSubmit={selectedFile ? handleImageAsk : handleTextSubmit}>
+            <input type="text" value={textInput} onChange={(e) => setTextInput(e.target.value)} placeholder={selectedFile ? "Ask about the image..." : "Type a command..."} disabled={isProcessing || isRecording} />
+            <label htmlFor="image-input" className="btn">{selectedFile ? selectedFile.name.substring(0, 10) + "..." : "IMAGE"}</label>
+            <input id="image-input" type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }} />
+            <button type="button" className="btn" onClick={isRecording ? stopRecording : startRecording} disabled={isProcessing}>{isRecording ? "STOP" : "VOICE"}</button>
+            <button type="button" className="btn" onClick={() => setShowSidebar(!showSidebar)}>{showSidebar ? "HIDE" : "SHOW"}</button>
+            <button type="submit" className="btn" disabled={(!textInput.trim() && !selectedFile) || isProcessing}>{selectedFile ? "ASK" : "SEND"}</button>
+          </form>
+        </div>
       </div>
-
-      {/* INPUT AREA */}
-      <form className="input-area" onSubmit={selectedFile ? handleImageAsk : handleTextSubmit}>
-        <input
-          type="text"
-          value={textInput}
-          onChange={(e) => setTextInput(e.target.value)}
-          placeholder={selectedFile ? "Ask about the image..." : "Type a command..."}
-          disabled={isProcessing || isRecording}
-        />
-
-        {/* IMAGE BUTTON */}
-        <label htmlFor="image-input" className="btn" style={{ cursor: 'pointer' }}>
-          {selectedFile ? selectedFile.name.substring(0, 10) + "..." : "IMAGE"}
-        </label>
-        <input
-          id="image-input"
-          type="file"
-          accept="image/*"
-          onChange={handleImageChange}
-          style={{ display: 'none' }}
-        />
-
-        {/* MIC BUTTON */}
-        <button
-          type="button"
-          className="btn"
-          onClick={isRecording ? stopRecording : startRecording}
-          disabled={isProcessing}
-        >
-          {isRecording ? "STOP" : "VOICE"}
-        </button>
-
-        {/* SIDEBAR TOGGLE */}
-        <button
-            type="button"
-            className="btn"
-            onClick={() => setShowSidebar(!showSidebar)}
-        >
-          {showSidebar ? "HIDE" : "SHOW"}
-        </button>
-
-        {/* SEND BUTTON */}
-        <button
-          type="submit"
-          className="btn"
-          disabled={(!textInput.trim() && !selectedFile) || isProcessing}
-        >
-          {selectedFile ? "ASK" : "SEND"}
-        </button>
-      </form>
     </div>
+
   );
 }
 
