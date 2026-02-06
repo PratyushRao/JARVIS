@@ -52,10 +52,10 @@ from faster_whisper import WhisperModel
 # =====================
 # IMPORTS
 # =====================
-from backend.brain import memory_manager as mem
-from backend.brain import llm_services as brain
-from backend.brain import web_search as searcher     
-from backend import auth 
+from brain import memory_manager as mem
+from brain import llm_services as brain
+from brain import web_search as searcher     
+import auth 
 
 from langchain_core.messages import HumanMessage, AIMessage
 
