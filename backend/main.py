@@ -62,47 +62,30 @@ from langchain_core.messages import HumanMessage, AIMessage
 # =====================
 # CONFIG & LIFESPAN
 # =====================
-FFMPEG_PATH = shutil.which("ffmpeg") or r"C:\ffmpeg\bin\ffmpeg.exe"
-AGENT_PATH = os.path.join(os.path.dirname(__file__), "agent.exe")
-connected_agent = None
+FFMPEG_PATH = shutil.which("ffmpeg")
+
+if not FFMPEG_PATH:
+    raise RuntimeError("ffmpeg not found in PATH")
+
+
+connected_agent: WebSocket | None = None
 agent_lock = asyncio.Lock()
+
 
 # Global Model Variables
 whisper_model = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # --- STARTUP LOGIC ---
     print("🚀 JARVIS Systems Initializing...")
-    
-    # 1. Start Local Agent
-    try:
-        if os.path.exists(AGENT_PATH):
-            subprocess.Popen(AGENT_PATH)
-            print("🚀 Local agent started automatically")
-    except Exception as e:
-        print("❌ Failed to start agent:", e)
 
-    # 2. Load Whisper
+    # ✅ Load Whisper (OK on Render IF model size is reasonable)
     global whisper_model
     print("⏳ Loading Whisper Model...")
     whisper_model = WhisperModel("small.en", device="cpu", compute_type="int8")
     print("✅ Whisper Model Loaded!")
 
-    # 3. Preload Multimodal
-    print("⏳ Preloading Multimodal Model...")
-    try:
-        from backend.brain import local_multimodal
-        if local_multimodal.is_available():
-            local_multimodal._init_model()
-            print("✅ Multimodal Model Preloaded!")
-        else:
-            print("⚠️ Multimodal Model not available")
-    except Exception as e:
-        print(f"⚠️ Failed to preload multimodal model: {e}")
-
     yield
-    # --- SHUTDOWN LOGIC ---
     print("🛑 JARVIS Systems Shutting Down...")
 
 # --- APP INITIALIZATION (DO THIS ONLY ONCE) ---
@@ -456,30 +439,41 @@ async def text_to_speech(req: TTSRequest):
         if os.path.exists(output_file):
             os.remove(output_file)
 
+connected_agent: WebSocket | None = None
+
 @app.websocket("/ws/agent")
 async def agent_ws(ws: WebSocket):
     global connected_agent
     await ws.accept()
-    connected_agent = ws
-    print("🖥 Agent connected")
-    
+
+    async with agent_lock:
+        connected_agent = ws
+
+    print("🟢 Agent connected")
+
     try:
         while True:
             data = await ws.receive_text()
-            print("Agent result:", data)
+            print("📩 Agent says:", data)
+
     except Exception as e:
-        print("Agent disconnected:", e)
+        print("🔴 Agent disconnected:", e)
+
     finally:
-        if connected_agent == ws:
-            connected_agent = None
+        async with agent_lock:
+            if connected_agent == ws:
+                connected_agent = None
+
 
 
 @app.get("/agent-status")
 def agent_status():
     return {"connected": connected_agent is not None}
 
-
 if __name__ == "__main__":
     import uvicorn
-    print("🚀 JARVIS Backend running on http://127.0.0.1:8000")
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 8000))
+    )
