@@ -1,6 +1,6 @@
 import sys
 import pathlib
-import json   
+import json    
 import asyncio
 import os
 import io
@@ -31,7 +31,7 @@ from faster_whisper import WhisperModel
 # =====================
 from backend.brain import memory_manager as mem
 from backend.brain import llm_services as brain
-from backend.brain import web_search as searcher    
+from backend.brain import web_search as searcher     
 from backend import auth 
 
 from langchain_core.messages import HumanMessage, AIMessage
@@ -171,6 +171,14 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     access_token = auth.create_access_token(data={"sub": user["username"]})
     return {"access_token": access_token, "token_type": "bearer", "username": user["username"]}
 
+# --- NEW: PROFILE ENDPOINT (Added for your requirement) ---
+@app.get("/users/me")
+def get_profile(current_user: str = Depends(auth.get_current_user)):
+    """Returns the profile info for the logged-in user."""
+    return {
+        "username": current_user,
+        "status": "online"
+    }
 
 # =====================
 # 1. MANAGEMENT ENDPOINTS (PROTECTED)

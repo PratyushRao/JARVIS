@@ -10,5 +10,9 @@
     "Pratyus": {
         "username": "Pratyus",
         "hashed_password": "$bcrypt-sha256$v=2,t=2b,r=12$2HCp.Io2RtEZQAPd9FF/jO$dHdHYnOmY1kc2c9n9/rfIzRDsxE7PlK"
+    },
+    "avanish1": {
+        "username": "avanish1",
+        "hashed_password": "$bcrypt-sha256$v=2,t=2b,r=12$KMtPaTmFte4uPNPejVaB4u$ab.Bfz27H7hDqP1oLcRh9/NLbOlZK5a"
     }
 }
