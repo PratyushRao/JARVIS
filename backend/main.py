@@ -99,9 +99,15 @@ async def get_whisper_model():
 # --- APP INITIALIZATION (DO THIS ONLY ONCE) ---
 app = FastAPI(lifespan=lifespan)
 
+origins = [
+    "http://localhost:5173",
+    "https://jarvis-byte-me.vercel.app/"
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=origins, 
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
