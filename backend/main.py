@@ -415,7 +415,6 @@ def service_status():
 async def speech_to_text(file: UploadFile = File(...)):
     uid = uuid.uuid4().hex
     webm_path = f"{uid}.webm"
-    wav_path = f"{uid}.wav"
     clean_wav_path = f"{uid}_clean.wav"
 
     try:
@@ -429,18 +428,19 @@ async def speech_to_text(file: UploadFile = File(...)):
             "-ar", "16000", "-ac", "1",
             "-af", "highpass=f=200, lowpass=f=3000, afftdn, silenceremove=stop_periods=-1:stop_threshold=-50dB",
             clean_wav_path
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
-       model = await get_whisper_model()
+        model = await get_whisper_model()
 
-        segments, _ = model.transcribe(
+        result = model.transcribe(
             clean_wav_path,
             language="en",
             vad_filter=True
         )
 
-        text = " ".join(s.text for s in segments)
-        
+        segments = result.get("segments", [])
+        text = " ".join(s["text"] for s in segments) if segments else result.get("text", "")
+
         return {"text": text.strip()}
 
     except Exception as e:
