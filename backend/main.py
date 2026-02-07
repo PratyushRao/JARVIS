@@ -100,8 +100,8 @@ async def get_whisper_model():
 app = FastAPI(lifespan=lifespan)
 
 origins = [
-    "http://localhost:5173",
-    "https://jarvis-byte-me.vercel.app/"
+    "https://jarvis-byte-me.vercel.app",
+    "http://localhost:5173"
 ]
 
 app.add_middleware(
