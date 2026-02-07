@@ -52,12 +52,9 @@ from faster_whisper import WhisperModel
 # =====================
 # IMPORTS
 # =====================
-from brain import memory_manager as mem
-from brain import llm_services as brain
-from brain import web_search as searcher     
+
 import auth 
 
-from langchain_core.messages import HumanMessage, AIMessage
 
 # =====================
 # CONFIG & LIFESPAN
@@ -65,28 +62,39 @@ from langchain_core.messages import HumanMessage, AIMessage
 FFMPEG_PATH = shutil.which("ffmpeg")
 
 if not FFMPEG_PATH:
-    raise RuntimeError("ffmpeg not found in PATH")
+    print("⚠️ ffmpeg not found — STT disabled")
+
 
 
 connected_agent: WebSocket | None = None
 agent_lock = asyncio.Lock()
 
+ENABLE_LOCAL_MM = os.getenv("ENABLE_LOCAL_MM", "false") == "true"
 
 # Global Model Variables
 whisper_model = None
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("🚀 JARVIS Systems Initializing...")
-
-    # ✅ Load Whisper (OK on Render IF model size is reasonable)
-    global whisper_model
-    print("⏳ Loading Whisper Model...")
-    whisper_model = WhisperModel("small.en", device="cpu", compute_type="int8")
-    print("✅ Whisper Model Loaded!")
-
+    print("🚀 JARVIS backend ready")
     yield
-    print("🛑 JARVIS Systems Shutting Down...")
+
+
+whisper_lock = asyncio.Lock()
+
+async def get_whisper_model():
+    global whisper_model
+    async with whisper_lock:
+        if whisper_model is None:
+            whisper_model = WhisperModel(
+                "tiny.en",
+                device="cpu",
+                compute_type="int8"
+            )
+    return whisper_model
+
+
 
 # --- APP INITIALIZATION (DO THIS ONLY ONCE) ---
 app = FastAPI(lifespan=lifespan)
@@ -138,6 +146,7 @@ def extract_first_json(text):
     return None 
 
 def perform_search(query):
+    from brain import web_search as searcher
     print(f"🔎 Jarvis is searching the web for: {query}")
     tool = searcher.get_search_tool()
     try:
@@ -193,16 +202,19 @@ def get_profile(current_user: dict = Depends(auth.get_current_user)):
 
 @app.get("/chats")
 def list_chats(current_user: dict = Depends(auth.get_current_user)):
+    from brain import memory_manager as mem
     user_id = current_user["username"]
     return mem.get_all_chats(user_id=user_id)
 
 @app.post("/chats/new")
 def create_chat(current_user: dict = Depends(auth.get_current_user)):
+    from brain import memory_manager as mem
     user_id = current_user["username"]
     return mem.create_new_chat(user_id=user_id)
 
 @app.put("/chats/{chat_id}")
 def rename_chat(chat_id: str, req: RenameRequest, current_user: dict = Depends(auth.get_current_user)):
+    from brain import memory_manager as mem
     user_id = current_user["username"]
     success = mem.rename_chat(chat_id, req.new_name, user_id=user_id)
     if not success:
@@ -211,6 +223,7 @@ def rename_chat(chat_id: str, req: RenameRequest, current_user: dict = Depends(a
 
 @app.delete("/chats/{chat_id}")
 def delete_chat(chat_id: str, current_user: dict = Depends(auth.get_current_user)):
+    from brain import memory_manager as mem
     user_id = current_user["username"]
     success = mem.delete_chat(chat_id, user_id=user_id)
     if not success:
@@ -220,6 +233,7 @@ def delete_chat(chat_id: str, current_user: dict = Depends(auth.get_current_user
 
 @app.get("/chats/{chat_id}/history")
 def get_history(chat_id: str, current_user: dict = Depends(auth.get_current_user)):
+    from brain import memory_manager as mem
     user_id = current_user["username"]
     return mem.get_chat_history(chat_id, user_id=user_id)
 
@@ -230,6 +244,9 @@ def get_history(chat_id: str, current_user: dict = Depends(auth.get_current_user
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(req: ChatRequest, current_user: dict = Depends(auth.get_current_user)):
+    from brain import memory_manager as mem
+    from brain import llm_services as brain
+    from langchain_core.messages import HumanMessage, AIMessage
     user_id = current_user["username"]
     user_text = req.text
     chat_id = req.chat_id
@@ -317,6 +334,10 @@ async def image_question(
     chat_id: Optional[str] = Form(None),
     current_user: dict = Depends(auth.get_current_user)
 ):
+    from brain import memory_manager as mem
+    from brain import llm_services as brain
+    from langchain_core.messages import HumanMessage, AIMessage
+
     user_id = current_user["username"]
     if not chat_id:
         new_chat = mem.create_new_chat(user_id=user_id)
@@ -329,7 +350,11 @@ async def image_question(
     error_message = None 
     
     try:
-        from backend.brain import local_multimodal
+        if ENABLE_LOCAL_MM:
+            from brain import local_multimodal
+        else:
+            local_multimodal = None
+
         if local_multimodal and local_multimodal.is_available():
             image_description, error_message = local_multimodal.analyze_image_with_local_llm(contents, None)
         else:
@@ -377,7 +402,7 @@ async def image_question(
 @app.get("/status")
 def service_status():
     try:
-        from backend.brain import llm_services
+        from brain import llm_services
         return llm_services.check_status()
     except Exception as e:
         return {"error": str(e)}
@@ -392,9 +417,11 @@ async def speech_to_text(file: UploadFile = File(...)):
     webm_path = f"{uid}.webm"
     wav_path = f"{uid}.wav"
     clean_wav_path = f"{uid}_clean.wav"
-    
+
     try:
         with open(webm_path, "wb") as f:
+            if not FFMPEG_PATH:
+                raise HTTPException(status_code=503, detail="STT not available")
             f.write(await file.read())
 
         subprocess.run([
@@ -404,7 +431,14 @@ async def speech_to_text(file: UploadFile = File(...)):
             clean_wav_path
         ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
-        segments, _ = whisper_model.transcribe(clean_wav_path, language="en", vad_filter=True)
+       model = await get_whisper_model()
+
+        segments, _ = model.transcribe(
+            clean_wav_path,
+            language="en",
+            vad_filter=True
+        )
+
         text = " ".join(s.text for s in segments)
         
         return {"text": text.strip()}
@@ -417,20 +451,22 @@ async def speech_to_text(file: UploadFile = File(...)):
             if os.path.exists(path):
                 os.remove(path)
 
+tts_semaphore = asyncio.Semaphore(1)
 
 @app.post("/tts")
 async def text_to_speech(req: TTSRequest):
     text = req.text
     if not text.strip():
         return {"error": "No text provided"}
-
+        
     clean_text = re.sub(r'[*#`_~]', '', text) 
     output_file = f"tts_{uuid.uuid4().hex}.mp3"
     
     try:
-        communicate = edge_tts.Communicate(clean_text, "en-GB-RyanNeural")
-        await communicate.save(output_file)
-        
+        async with tts_semaphore:
+            communicate = edge_tts.Communicate(clean_text, "en-GB-RyanNeural")
+            await communicate.save(output_file)
+            
         with open(output_file, "rb") as f:
             audio_data = f.read()
         
@@ -439,7 +475,6 @@ async def text_to_speech(req: TTSRequest):
         if os.path.exists(output_file):
             os.remove(output_file)
 
-connected_agent: WebSocket | None = None
 
 @app.websocket("/ws/agent")
 async def agent_ws(ws: WebSocket):
