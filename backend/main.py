@@ -101,12 +101,14 @@ app = FastAPI(lifespan=lifespan)
 
 origins = [
     "https://jarvis-byte-me.vercel.app",
+    "https://jarvis-byte-me.vercel.app/",
     "http://localhost:5173"
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[*], 
+    allow_origins=origins,
+    allow-credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
