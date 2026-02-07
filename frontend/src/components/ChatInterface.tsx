@@ -11,7 +11,7 @@ interface Message {
 }
 
 export default function ChatInterface() {
-  // --- CORE STATE ---
+  // CORE STATE
   const [agentOnline, setAgentOnline] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -31,29 +31,26 @@ export default function ChatInterface() {
     };
   }, [imagePreviewUrl]);
   
-  // --- UI STATE ---
+  // UI STATE 
   const [showSidebar, setShowSidebar] = useState(false);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
 
-  // --- REFS ---
+  // REFS 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   
-  // --- AUDIO PLAYER REF (THE FIX) ---
+  // AUDIO PLAYER REF (THE FIX) 
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
-  // 1. Scroll to bottom
+  // Scroll to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // =====================
   // SIDEBAR ACTIONS
-  // =====================
-
   const handleSelectChat = async (id: string) => {
-    stopSpeaking(); // Stop talking when switching chats
+    stopSpeaking(); 
     setActiveChatId(id);
     const history = await api.fetchChatHistory(id);
     
@@ -66,7 +63,7 @@ export default function ChatInterface() {
   };
 
   const handleNewChat = async () => {
-    stopSpeaking(); // Stop talking on new chat
+    stopSpeaking(); 
     const newChat = await api.createNewChat();
     setActiveChatId(newChat.chat_id);
     setMessages([]); 
@@ -98,10 +95,7 @@ export default function ChatInterface() {
     return () => clearInterval(interval);
   }, []);
 
-  // =====================
   // VOICE ENGINE
-  // =====================
-
   const startRecording = async () => {
     stopSpeaking(); // Stop Jarvis if he's talking so he doesn't listen to himself
     try {
@@ -133,10 +127,7 @@ export default function ChatInterface() {
     setIsRecording(false);
   };
 
-  // =====================
   // MESSAGE PROCESSING
-  // =====================
-
   const handleAudioSubmit = async (audioBlob: Blob) => {
     setIsProcessing(true);
     try {
@@ -156,7 +147,7 @@ export default function ChatInterface() {
     e.preventDefault();
     if (!textInput.trim()) return;
 
-    // KEY FIX: Stop any current audio immediately when user sends a new message
+    // Stop any current audio immediately when user sends a new message
     stopSpeaking();
 
     addMessage("user", textInput);
@@ -220,9 +211,7 @@ export default function ChatInterface() {
     }
   };
 
-  // =====================
-  // TTS & ANIMATION (FIXED)
-  // =====================
+  // TTS & ANIMATION 
 
   // Helper to kill current audio
   const stopSpeaking = () => {
@@ -237,7 +226,7 @@ export default function ChatInterface() {
   const playAudioResponse = async (text: string) => {
     if (!text) return;
 
-    // 1. Kill any existing audio before starting new one
+    // Kill any existing audio before starting new one
     stopSpeaking();
 
     setIsSpeaking(true); 

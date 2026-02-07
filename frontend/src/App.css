@@ -168,7 +168,7 @@ body {
   box-shadow: none;
 }
 
-/* --- CHAT LOG --- */
+/* CHAT LOG */
 .chat-container {
   display: flex;
   flex-direction: column;
@@ -247,7 +247,7 @@ body {
 }
 
 
-/* --- INPUT AREA --- */
+/* INPUT AREA */
 .system-text {
   width: 100%;
   text-align: center;
@@ -404,7 +404,7 @@ input[type="text"]:focus {
 
 .menu-item:hover { background: rgba(255,255,255,0.02); color: white; }
 
-/* --- ANIMATIONS --- */
+/*ANIMATIONS*/
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
@@ -420,11 +420,8 @@ input[type="text"]:focus {
   padding: 0;
 }
 
-/* =================================================================
-   ⬇️ PASTE THIS AT THE VERY BOTTOM OF YOUR EXISTING src/App.css ⬇️
-   ================================================================= */
 
-/* --- FULL SCREEN OVERLAYS (Intro & Login) --- */
+/* FULL SCREEN OVERLAYS (Intro & Login)*/
 .cinematic-overlay {
     position: fixed;
     top: 0;
@@ -449,7 +446,7 @@ input[type="text"]:focus {
     background-size: 50px 50px;
 }
 
-/* --- BIG BOOT-UP REACTOR (Different from Chat Orb) --- */
+/* BIG BOOT-UP REACTOR (Different from Chat Orb) */
 .boot-reactor-container {
     position: relative;
     width: 200px;
@@ -494,7 +491,7 @@ input[type="text"]:focus {
     100% { transform: scale(0.95); opacity: 0.8; }
 }
 
-/* --- LOGIN HUD PANEL --- */
+/*LOGIN HUD PANEL*/
 .login-panel {
     width: 400px;
     padding: 50px;

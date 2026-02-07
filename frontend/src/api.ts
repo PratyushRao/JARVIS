@@ -12,13 +12,13 @@ export interface ChatMessage {
   content: string;
 }
 
-// --- AUTH HELPER ---
+// AUTH HELPER
 const getAuthHeaders = (): Record<string, string> => {
   const token = localStorage.getItem("jarvis_token");
   return token ? { "Authorization": `Bearer ${token}` } : {};
 };
 
-// --- MANAGEMENT ---
+// MANAGEMENT
 
 export const fetchChatList = async (): Promise<ChatItem[]> => {
   try {
@@ -70,7 +70,7 @@ export const renameChat = async (chatId: string, newName: string) => {
   }
 };
 
-// --- CORE INTERACTION ---
+// CORE INTERACTION
 
 export const sendMessage = async (text: string, chatId: string | null) => {
   const res = await fetch(`${API_BASE}/chat`, {
@@ -88,7 +88,7 @@ export const sendMessage = async (text: string, chatId: string | null) => {
   return await res.json();
 };
 
-// --- MULTIMEDIA (Vision/Voice) ---
+// MULTIMEDIA (Vision/Voice)
 
 export const sendImageQuestion = async (file: File, question: string, chatId: string | null) => {
     const form = new FormData();
@@ -96,7 +96,7 @@ export const sendImageQuestion = async (file: File, question: string, chatId: st
     form.append("question", question);
     if (chatId) form.append("chat_id", chatId);
 
-    // Note: Fetch handles Content-Type for FormData automatically, 
+    // Fetch handles Content-Type for FormData automatically, 
     // but we still need to append the Authorization header.
     const res = await fetch(`${API_BASE}/image_qa`, {
         method: "POST",
