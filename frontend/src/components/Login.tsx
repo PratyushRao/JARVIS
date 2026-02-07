@@ -18,7 +18,7 @@ export default function Login() {
     setLoading(true);
 
     // Endpoints
-    const endpoint = isLogin ? "http://127.0.0.1:8000/token" : "http://127.0.0.1:8000/signup";
+    const endpoint = isLogin ? "https://jarvis-06fa.onrender.com/token" : "https://jarvis-06fa.onrender.com/signup";
     
     let body;
     let headers = {};
