@@ -1,5 +1,5 @@
 /* src/api.ts */
- API_BASE = import.meta.env.VITE_API_BASE as string;
+const API_BASE = import.meta.env.VITE_API_BASE as string;
 
 export interface ChatItem {
   chat_id: string;
