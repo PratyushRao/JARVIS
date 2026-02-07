@@ -162,6 +162,11 @@ def perform_search(query):
         print(f"❌ Search Error: {e}")
         return "I attempted to search but encountered an error."
 
+#Trial
+@app.get("/")
+def root():
+    return {"status": "Backend is running!"}
+
 # =====================
 # 0. AUTH ENDPOINTS
 # =====================
