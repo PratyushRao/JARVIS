@@ -65,6 +65,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://jarvis-byte-me.vercel.app",
+        "https://jarvis-byte-me.vercel.app/",
         "http://localhost:5173"
     ],
     allow_credentials=True,
