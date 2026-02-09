@@ -1,6 +1,6 @@
 /* src/api.ts */
 
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = "https://jarvis-06fa.onrender.com";
 
 export interface ChatItem {
   chat_id: string;
@@ -102,13 +102,11 @@ export const sendImageQuestion = async (file: File, question: string, chatId: st
     return await res.json();
 };
 
-// FIXED: Changed endpoint to /stt and field name to 'file'
 export async function sendAudio(audio: Blob, chatId: string | null) {
   const formData = new FormData();
-  // Backend expects 'file' not 'audio'
-  formData.append("file", audio, "recording.webm"); 
-  
-  // Backend endpoint is /stt
+  formData.append("file", audio, "recording.webm");
+  if (chatId) formData.append("chat_id", chatId);
+
   const res = await fetch(`${API_BASE}/stt`, {
     method: "POST",
     body: formData,
@@ -116,6 +114,7 @@ export async function sendAudio(audio: Blob, chatId: string | null) {
 
   return res.json();
 }
+
 
 export const playTTS = async (text: string) => {
   try {
