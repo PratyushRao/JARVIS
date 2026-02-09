@@ -152,6 +152,47 @@ async def login(form: OAuth2PasswordRequestForm = Depends()):
 def me(current_user: dict = Depends(auth.get_current_user)):
     return {"username": current_user["username"]}
 
+
+# ---------------- Local Agent ----------------
+
+connected_agent = None
+agent_lock = asyncio.Lock()
+
+async def send_to_agent(payload: dict):
+    if not connected_agent:
+        raise RuntimeError("Local agent not connected")
+
+    await connected_agent.send_text(json.dumps(payload))
+    
+@app.post("/agent/ping")
+async def ping_agent():
+    await send_to_agent({
+        "action": "ping",
+        "message": "Hello from backend"
+    })
+    return {"status": "sent"}
+
+
+@app.websocket("/ws/agent")
+async def agent_ws(ws: WebSocket):
+    global connected_agent
+    await ws.accept()
+    print("🧠 Local agent connected")
+
+    async with agent_lock:
+        connected_agent = ws
+
+    try:
+        while True:
+            msg = await ws.receive_text()
+            print("📨 From agent:", msg)
+    except Exception:
+        print("❌ Agent disconnected")
+    finally:
+        async with agent_lock:
+            connected_agent = None
+
+
 # ---------------- CHAT ----------------
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest, current_user=Depends(auth.get_current_user)):
@@ -168,6 +209,24 @@ async def chat(req: ChatRequest, current_user=Depends(auth.get_current_user)):
     ai_response = brain.get_brain_response(req.text, lc_history, long_mem)
     ai_response = ai_response.replace("```json", "").replace("```", "")
 
+    tool_call = extract_first_json(ai_response)
+
+    if tool_call:
+        cmd = json.loads(tool_call)
+
+        if cmd["type"] == "local_action":
+            await send_to_agent(cmd)
+    
+            mem.append_to_chat(chat_id, "human", req.text, user_id)
+            mem.append_to_chat(chat_id, "ai", "✅ Done on your system", user_id)
+    
+            return ChatResponse(
+                response="✅ Done on your system",
+                chat_id=chat_id
+            )
+
+
+    
     mem.append_to_chat(chat_id, "human", req.text, user_id)
     mem.append_to_chat(chat_id, "ai", ai_response, user_id)
 
@@ -216,30 +275,6 @@ async def tts(req: TTSRequest):
         if os.path.exists(out):
             os.remove(out)
 
-
-# ---------------- Local Agent ----------------
-
-connected_agent = None
-agent_lock = asyncio.Lock()
-
-@app.websocket("/ws/agent")
-async def agent_ws(ws: WebSocket):
-    global connected_agent
-    await ws.accept()
-    print("🧠 Local agent connected")
-
-    async with agent_lock:
-        connected_agent = ws
-
-    try:
-        while True:
-            msg = await ws.receive_text()
-            print("📨 From agent:", msg)
-    except Exception:
-        print("❌ Agent disconnected")
-    finally:
-        async with agent_lock:
-            connected_agent = None
 
 
 # ---------------- RUN ----------------
