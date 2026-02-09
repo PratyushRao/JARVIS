@@ -81,7 +81,7 @@ export default function ChatInterface() {
   useEffect(() => {
     const checkAgent = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/agent-status");
+        const res = await fetch("https://jarvis-06fa.onrender.com/agent-status");
         const data = await res.json();
         setAgentOnline(data.connected);
       } catch {
@@ -229,7 +229,7 @@ export default function ChatInterface() {
     setIsSpeaking(true); 
 
     try {
-        const res = await fetch("http://127.0.0.1:8000/tts", {
+        const res = await fetch("https://jarvis-06fa.onrender.com/tts", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text })
