@@ -216,6 +216,32 @@ async def tts(req: TTSRequest):
         if os.path.exists(out):
             os.remove(out)
 
+
+# ---------------- Local Agent ----------------
+
+connected_agent = None
+agent_lock = asyncio.Lock()
+
+@app.websocket("/ws/agent")
+async def agent_ws(ws: WebSocket):
+    global connected_agent
+    await ws.accept()
+    print("🧠 Local agent connected")
+
+    async with agent_lock:
+        connected_agent = ws
+
+    try:
+        while True:
+            msg = await ws.receive_text()
+            print("📨 From agent:", msg)
+    except Exception:
+        print("❌ Agent disconnected")
+    finally:
+        async with agent_lock:
+            connected_agent = None
+
+
 # ---------------- RUN ----------------
 if __name__ == "__main__":
     import uvicorn
