@@ -1,6 +1,6 @@
 /* src/api.ts */
 
-const API_BASE = "https://jarvis-06fa.onrender.com";
+const API_BASE = import.meta.env.VITE_API_BASE;
 
 export interface ChatItem {
   chat_id: string;
