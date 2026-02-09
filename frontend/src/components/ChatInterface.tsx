@@ -1,4 +1,4 @@
-/* src/App.tsx */
+/* src/App.tsx (or src/components/ChatInterface.tsx) */
 import { useRef, useState, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import * as api from "../api"; 
@@ -40,7 +40,6 @@ export default function ChatInterface() {
   const audioChunksRef = useRef<Blob[]>([]);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   
-  // AUDIO PLAYER REF (THE FIX) 
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
   // Scroll to bottom
@@ -97,7 +96,7 @@ export default function ChatInterface() {
 
   // VOICE ENGINE
   const startRecording = async () => {
-    stopSpeaking(); // Stop Jarvis if he's talking so he doesn't listen to himself
+    stopSpeaking(); 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
@@ -128,14 +127,18 @@ export default function ChatInterface() {
   };
 
   // MESSAGE PROCESSING
+  // --- FIX HERE: Handle the response object correctly ---
   const handleAudioSubmit = async (audioBlob: Blob) => {
     setIsProcessing(true);
     try {
-      const text = await api.sendAudio(audioBlob, activeChatId);
+      // api.sendAudio returns { text: "..." } or { error: "..." }
+      const responseData = await api.sendAudio(audioBlob, activeChatId);
 
-      if (text) {
-        addMessage("user", text);
-        await processResponse(text);
+      if (responseData && responseData.text) {
+        addMessage("user", responseData.text);
+        await processResponse(responseData.text);
+      } else {
+        console.warn("STT did not return text:", responseData);
       }
     } catch (error) {
       console.error("Error sending audio:", error);
@@ -147,7 +150,6 @@ export default function ChatInterface() {
     e.preventDefault();
     if (!textInput.trim()) return;
 
-    // Stop any current audio immediately when user sends a new message
     stopSpeaking();
 
     addMessage("user", textInput);
@@ -175,7 +177,7 @@ export default function ChatInterface() {
       return;
     }
 
-    stopSpeaking(); // Stop audio
+    stopSpeaking(); 
     setIsProcessing(true);
     try {
       addMessage("user", `[Image: ${selectedFile.name}] ${textInput}`);
@@ -212,8 +214,6 @@ export default function ChatInterface() {
   };
 
   // TTS & ANIMATION 
-
-  // Helper to kill current audio
   const stopSpeaking = () => {
     if (audioPlayerRef.current) {
         audioPlayerRef.current.pause();
@@ -225,10 +225,7 @@ export default function ChatInterface() {
 
   const playAudioResponse = async (text: string) => {
     if (!text) return;
-
-    // Kill any existing audio before starting new one
     stopSpeaking();
-
     setIsSpeaking(true); 
 
     try {
@@ -242,7 +239,6 @@ export default function ChatInterface() {
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
 
-        // 2. Save reference to global ref so we can stop it later
         audioPlayerRef.current = audio;
 
         audio.onended = () => {
@@ -258,7 +254,9 @@ export default function ChatInterface() {
   };
 
   const addMessage = (sender: "user" | "jarvis", text: string) => {
-    setMessages((prev) => [...prev, { sender, text }]);
+    // Safety check: ensure text is actually a string
+    const safeText = typeof text === 'string' ? text : JSON.stringify(text);
+    setMessages((prev) => [...prev, { sender, text: safeText }]);
   };
 
   return (
@@ -290,11 +288,13 @@ export default function ChatInterface() {
           <div className="chat-window">
             {messages.length === 0 && <div className="system-text">System Online. Awaiting Input...</div>}
             {messages.map((msg, i) => {
-              const lower = (msg.text || '').toLowerCase();
+              // Safety check inside render loop
+              const safeText = typeof msg.text === 'string' ? msg.text : '';
+              const lower = safeText.toLowerCase();
               const isError = lower.includes('attempted to process') || lower.includes("language model is unavailable");
               return (
                 <div key={i} className={`message ${msg.sender} ${isError ? 'error' : ''}`}>
-                  <ReactMarkdown>{msg.text}</ReactMarkdown>
+                  <ReactMarkdown>{safeText}</ReactMarkdown>
                 </div>
               );
             })}
@@ -319,7 +319,6 @@ export default function ChatInterface() {
                 {isRecording ? "STOP" : "VOICE"}
             </button>
             
-            {/* NEW MUTE BUTTON: Only shows when speaking */}
             {isSpeaking && (
                 <button type="button" className="btn stop-btn" onClick={stopSpeaking} style={{backgroundColor: '#ff4444', color: 'white'}}>
                     MUTE
@@ -339,4 +338,3 @@ export default function ChatInterface() {
     </div>
   );
 }
-

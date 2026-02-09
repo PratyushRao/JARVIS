@@ -224,6 +224,7 @@ body {
   letter-spacing: 1px;
   word-wrap: break-word;
   line-height: 1.4;
+  margin-bottom: 25px;
 }
 
 .message.user {

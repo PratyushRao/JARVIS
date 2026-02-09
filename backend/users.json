@@ -30,5 +30,9 @@
     "trial4": {
         "username": "trial4",
         "hashed_password": "$bcrypt-sha256$v=2,t=2b,r=12$76Pg07cTWgeZoUhRYaweeO$Uq3CL4wDwieKzFuMO4qnMQRyXgqgyUW"
+    },
+    "avanish": {
+        "username": "avanish",
+        "hashed_password": "$bcrypt-sha256$v=2,t=2b,r=12$14Pyt8Qbw1Byt1or2npi0u$caC61CqrlrcdrxOLuYoG/fZbtKUlSdC"
     }
 }

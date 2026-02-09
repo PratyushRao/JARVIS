@@ -51,7 +51,7 @@ from faster_whisper import WhisperModel
 # IMPORTS
 from backend.brain import memory_manager as mem
 from backend.brain import llm_services as brain
-from backend.brain import web_search as searcher     
+from backend.brain import web_search as searcher      
 from backend import auth 
 
 from langchain_core.messages import HumanMessage, AIMessage
@@ -168,7 +168,6 @@ def signup(user: SignupRequest):
 @app.post("/token")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     """Standard OAuth2 login endpoint."""
-    # FIXED: Was 'get_user_from_db', changed to 'get_user'
     user = auth.get_user(form_data.username)
     
     if not user or not auth.verify_password(form_data.password, user["hashed_password"]):
@@ -188,8 +187,6 @@ def get_profile(current_user: dict = Depends(auth.get_current_user)):
         "username": current_user["username"],
         "status": "online"
     }
-
-
 
 # MANAGEMENT ENDPOINTS (PROTECTED)
 @app.get("/chats")
@@ -288,8 +285,6 @@ async def chat_endpoint(req: ChatRequest, current_user: dict = Depends(auth.get_
             
             search_context = f"SYSTEM: I have searched Google. Here are the results: {search_results}\n\nUsing these results, answer the user's original question."
             
-
-            
             final_answer = brain.get_brain_response(search_context, langchain_history, long_term_mem)
     except Exception as e:
         print(f"⚠️ Tool call parsing failed, returning original response. Error: {e}")
@@ -320,7 +315,7 @@ async def image_question(
 
     contents = await file.read()
 
-    # Get the Image Description
+    # 1. Get the Image Description
     image_description = None
     error_message = None 
     
@@ -343,15 +338,21 @@ async def image_question(
         mem.append_to_chat(chat_id, "ai", ai_response, user_id=user_id)
         return ChatResponse(response=ai_response, chat_id=chat_id)
 
-    # Send Description to Brain
+    # 2. Send Description to Brain (WITH STRICTER INSTRUCTIONS)
     print(f"🖼️ Vision Model saw: {image_description}")
     
+    # --- UPDATED PROMPT: FORCE AI TO SPEAK, NOT SEARCH ---
     prompt_for_brain = (
-        f"SYSTEM: The user uploaded an image. "
-        f"The visual description is: '{image_description}'. "
-        f"User's Question: '{question}'\n"
-        "Answer the question using the visual description."
+        f"SYSTEM: The user has uploaded an image.\n"
+        f"VISUAL ANALYSIS: '{image_description}'\n"
+        f"USER QUESTION: '{question}'\n\n"
+        "INSTRUCTIONS:\n"
+        "1. Answer the user's question based PRIMARILY on the Visual Analysis provided above.\n"
+        "2. Do NOT use Google Search or external tools unless the user explicitly asks to 'search' or 'find more info'.\n"
+        "3. If the user asks 'describe this', simply rewrite the Visual Analysis in a natural, conversational tone.\n"
+        "4. Do NOT output JSON unless you are absolutely forced to search."
     )
+    # -----------------------------------------------------
 
     history_dicts = mem.get_chat_history(chat_id, user_id=user_id)
     langchain_history = []
@@ -363,13 +364,57 @@ async def image_question(
     
     long_term_mem = mem.get_long_term_memory(user_id=user_id)
 
-    final_answer = brain.get_brain_response(prompt_for_brain, langchain_history, long_term_mem)
+    # 3. Get Response
+    ai_response = brain.get_brain_response(prompt_for_brain, langchain_history, long_term_mem)
+    ai_response = ai_response.replace("```json", "").replace("```", "")
+    
+    # 4. Check if it STILL tried to use a tool (Safety Net)
+    tool_data = None
+    try:
+        json_str = extract_first_json(ai_response)
+        if json_str:
+            tool_data = json.loads(json_str)
+    except Exception as e:
+        print("JSON parse fail inside Image QA:", e)
 
+    final_answer = ai_response
+
+    # Handle Web Search triggered by Image Context
+    try:
+        if isinstance(tool_data, dict) and "query" in tool_data:
+            search_query = tool_data["query"]
+            print(f"🖼️ Image triggered search (despite instructions): {search_query}")
+            search_results = perform_search(search_query)
+            
+            search_context = (
+                f"SYSTEM: You analyzed an image which prompted a search.\n"
+                f"Search Results: {search_results}\n\n"
+                f"Now answer the user's original question about the image."
+            )
+            
+            final_answer = brain.get_brain_response(search_context, langchain_history, long_term_mem)
+            
+        # Handle Agent Actions
+        elif isinstance(tool_data, dict) and "action" in tool_data:
+            print("📤 Image triggered agent command:", tool_data)
+            if connected_agent:
+                try:
+                    await connected_agent.send_text(json.dumps(tool_data))
+                    final_answer = f"Executing {tool_data['action']} based on the image..."
+                except Exception as e:
+                    final_answer = "⚠️ Agent connected but command failed."
+            else:
+                final_answer = "⚠️ Local agent is not running."
+
+    except Exception as e:
+        print(f"⚠️ Tool call parsing failed in Image QA, returning original response. Error: {e}")
+        final_answer = ai_response
+
+    # 5. Save to Memory
     mem.append_to_chat(chat_id, "human", f"[Image: {file.filename}] {question}", user_id=user_id)
     mem.append_to_chat(chat_id, "ai", final_answer, user_id=user_id)
 
     return ChatResponse(response=final_answer, chat_id=chat_id)
-
 @app.get("/status")
 def service_status():
     try:

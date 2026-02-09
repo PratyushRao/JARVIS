@@ -19,7 +19,6 @@ const getAuthHeaders = (): Record<string, string> => {
 };
 
 // MANAGEMENT
-
 export const fetchChatList = async (): Promise<ChatItem[]> => {
   try {
     const res = await fetch(`${API_BASE}/chats`, {
@@ -71,7 +70,6 @@ export const renameChat = async (chatId: string, newName: string) => {
 };
 
 // CORE INTERACTION
-
 export const sendMessage = async (text: string, chatId: string | null) => {
   const res = await fetch(`${API_BASE}/chat`, {
     method: "POST",
@@ -83,21 +81,18 @@ export const sendMessage = async (text: string, chatId: string | null) => {
   });
   
   if (res.status === 401) {
-    window.location.href = "/login"; // Force redirect if token expires
+    window.location.href = "/login"; 
   }
   return await res.json();
 };
 
 // MULTIMEDIA (Vision/Voice)
-
 export const sendImageQuestion = async (file: File, question: string, chatId: string | null) => {
     const form = new FormData();
     form.append("file", file);
     form.append("question", question);
     if (chatId) form.append("chat_id", chatId);
 
-    // Fetch handles Content-Type for FormData automatically, 
-    // but we still need to append the Authorization header.
     const res = await fetch(`${API_BASE}/image_qa`, {
         method: "POST",
         headers: { ...getAuthHeaders() }, 
@@ -106,19 +101,21 @@ export const sendImageQuestion = async (file: File, question: string, chatId: st
 
     return await res.json();
 };
+
+// FIXED: Changed endpoint to /stt and field name to 'file'
 export async function sendAudio(audio: Blob, chatId: string | null) {
   const formData = new FormData();
-  formData.append("audio", audio);
-  if (chatId) formData.append("chat_id", chatId);
-
-  const res = await fetch("http://127.0.0.1:8000/audio", {
+  // Backend expects 'file' not 'audio'
+  formData.append("file", audio, "recording.webm"); 
+  
+  // Backend endpoint is /stt
+  const res = await fetch(`${API_BASE}/stt`, {
     method: "POST",
     body: formData,
   });
 
   return res.json();
 }
-
 
 export const playTTS = async (text: string) => {
   try {
