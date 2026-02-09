@@ -155,6 +155,13 @@ def me(current_user: dict = Depends(auth.get_current_user)):
 
 # ---------------- Local Agent ----------------
 
+@app.get("/agent-status")
+async def agent_status():
+    return {
+        "connected": connected_agent is not None
+    }
+
+
 connected_agent = None
 agent_lock = asyncio.Lock()
 
@@ -214,7 +221,7 @@ async def chat(req: ChatRequest, current_user=Depends(auth.get_current_user)):
     if tool_call:
         cmd = json.loads(tool_call)
 
-        if cmd["type"] == "local_action":
+        if cmd.get("type") == "local_action":
             await send_to_agent(cmd)
     
             mem.append_to_chat(chat_id, "human", req.text, user_id)
