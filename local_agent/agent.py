@@ -4,7 +4,8 @@ import json
 import time
 from os_controller import *
 
-SERVER = "ws://127.0.0.1:8000/ws/agent"
+SERVER = "wss://YOUR-BACKEND.onrender.com/ws/agent"
+
 LAST_ACTIVITY = time.time()
 
 
