@@ -61,28 +61,28 @@ class Brain:
                 "AVAILABLE ACTIONS:\n"
 
                 "Open an application:\n"
-                '{"action":"open_app","app":"notepad"}\n\n'
+                '{"type":"local_action","action":"open_app","app":"notepad"}\n\n'
 
                 "Close an application:\n"
                 '{"action":"close_app","app":"notepad"}\n\n'
 
                 "Open a website:\n"
-                '{"action":"open_website","url":"https://google.com"}\n\n'
+                '{"type":"local_action","action":"open_website","url":"https://google.com"}\n\n'
 
                 "Close a browser:\n"
-                '{"action":"close_website","browser":"chrome"}\n\n'
+                '{"type":"local_action","action":"close_website","browser":"chrome"}\n\n'
 
                 "Set system volume (0–100):\n"
-                '{"action":"set_volume","level":50}\n\n'
+                '{"type":"local_action","action":"set_volume","level":50}\n\n'
 
                 "Create a folder:\n"
-                '{"action":"create_folder","path":"%DESKTOP%\\NewFolder"}\n\n'
+                '{"type":"local_action","action":"create_folder","path":"%DESKTOP%\\NewFolder"}\n\n'
 
                 "Delete a file:\n"
-                '{"action":"delete_file","path":"C:\\\\Users\\\\User\\\\Downloads\\\\file.txt"}\n\n'
+                '{"type":"local_action","action":"delete_file","path":"C:\\\\Users\\\\User\\\\Downloads\\\\file.txt"}\n\n'
 
                 "Run an executable program:\n"
-                '{"action":"run_exe","path":"C:\\\\Program Files\\\\App\\\\app.exe","args":""}\n\n'
+                '{"type":"local_action","action":"run_exe","path":"C:\\\\Program Files\\\\App\\\\app.exe","args":""}\n\n'
 
                 "RULES:\n"
                 "- When using a tool, output ONLY JSON.\n"
