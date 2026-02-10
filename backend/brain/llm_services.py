@@ -52,7 +52,7 @@ class Brain:
                 "WEB SEARCH TOOL\n"
                 "Use when user asks about news, weather, current events, or unknown facts.\n"
                 "FORMAT:\n"
-                '{"query": "search text"}\n\n'
+                '{"type":"web_search","query":"search text"}\n\n'
 
                 "=========================\n"
                 "LOCAL DEVICE CONTROL TOOL\n"
@@ -64,7 +64,7 @@ class Brain:
                 '{"type":"local_action","action":"open_app","app":"notepad"}\n\n'
 
                 "Close an application:\n"
-                '{"action":"close_app","app":"notepad"}\n\n'
+                '{"type":"local_action","action":"close_app","app":"notepad"}\n\n'
 
                 "Open a website:\n"
                 '{"type":"local_action","action":"open_website","url":"https://google.com"}\n\n'
@@ -83,6 +83,12 @@ class Brain:
 
                 "Run an executable program:\n"
                 '{"type":"local_action","action":"run_exe","path":"C:\\\\Program Files\\\\App\\\\app.exe","args":""}\n\n'
+
+                "CRITICAL:\n"
+                "When using Local Device Control Tool:\n"
+                "- Output ONLY a single JSON object\n"
+                "- JSON MUST start at the FIRST character\n"
+                "- No text before or after the JSON\n\n"
 
                 "RULES:\n"
                 "- When using a tool, output ONLY JSON.\n"
